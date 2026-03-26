@@ -7,10 +7,10 @@
     "engines": {
     "node": "18.x"
   },
-  
+
   "scripts": {
   "dev": "vite",
-  "build": "npx vite build",
+  "build": "vite build",
   "preview": "vite preview"
 },
   "dependencies": {
