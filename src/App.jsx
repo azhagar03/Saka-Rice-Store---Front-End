@@ -15,7 +15,7 @@ import {
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/inventory', label: 'Inventory', icon: Package },
+  { path: '/stock', label: 'Stock', icon: Package },
   { path: '/billing', label: 'Billing', icon: Receipt },
   { path: '/new-sale', label: 'New Sale', icon: ShoppingCart },
   { path: '/sales', label: 'Sales History', icon: History },
@@ -141,7 +141,7 @@ function Layout({ onLogout }) {
         <main className="flex-1 overflow-auto p-4 md:p-6">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/stock" element={<Inventory />} />
             <Route path="/billing" element={<Billing />} />
             <Route path="/new-sale" element={<NewSale />} />
             <Route path="/sales" element={<SalesHistory />} />
