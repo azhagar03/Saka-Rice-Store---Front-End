@@ -85,7 +85,7 @@ function Sidebar({ open, setOpen, onLogout }) {
             </div>
             <div className="min-w-0">
               <p className="text-xs font-bold text-gray-900 truncate">Admin</p>
-              <p className="text-[10px] text-gray-500 truncate">sakastoreadmin@2026</p>
+              {/* <p className="text-[10px] text-gray-500 truncate">admin1/admin2/admin3</p> */}
             </div>
           </div>
           <button
