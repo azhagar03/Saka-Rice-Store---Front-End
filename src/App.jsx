@@ -7,15 +7,17 @@ import Inventory from './pages/Inventory';
 import NewSale from './pages/NewSale';
 import SalesHistory from './pages/SalesHistory';
 import Billing from './pages/Billing';
+import Customers from './pages/Customers';
 import Login from './pages/Login';
 import {
   LayoutDashboard, Package, ShoppingCart, History,
-  Store, Menu, Receipt, LogOut, ShieldCheck
+  Store, Menu, Receipt, LogOut, ShieldCheck, Users
 } from 'lucide-react';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/stock', label: 'Stock', icon: Package },
+  { path: '/customers', label: 'Customers', icon: Users },
   { path: '/billing', label: 'Billing', icon: Receipt },
   { path: '/new-sale', label: 'New Sale', icon: ShoppingCart },
   { path: '/sales', label: 'Sales History', icon: History },
@@ -142,6 +144,7 @@ function Layout({ onLogout }) {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/stock" element={<Inventory />} />
+            <Route path="/customers" element={<Customers />} />
             <Route path="/billing" element={<Billing />} />
             <Route path="/new-sale" element={<NewSale />} />
             <Route path="/sales" element={<SalesHistory />} />

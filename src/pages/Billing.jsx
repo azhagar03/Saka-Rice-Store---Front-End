@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { getRiceItems, getSales, getSaleById, createSale, updateSale, deleteSale } from '../utils/api';
+import { useState, useEffect, useRef } from 'react';
+import { getRiceItems, getSales, getSaleById, createSale, updateSale, deleteSale, getCustomersPending } from '../utils/api';
 import toast from 'react-hot-toast';
 import {
   Plus, Pencil, Trash2, Printer, Eye, X, ChevronLeft, ChevronRight, History,
@@ -166,12 +166,12 @@ const TAMIL = {
   status:'நிலை', method:'முறை', by:'செய்தவர்', page:'பக்கம்',
   continued:'அடுத்த பக்கத்தில் தொடர்கிறது',
   customerSeal:'வாங்குபவரின் முத்திரை & கையொப்பம்',
-  forShop:'சாகா அரிசி கடைக்காக',
+  forShop:'சகா அரிசி கடைக்காக',
   computerGenerated:'கணினி மூலம் உருவாக்கப்பட்ட விலைப்பட்டியல்',
   total:'மொத்தம்', invoices:'விலைப்பட்டியல்கள்', salesReport:'விற்பனை அறிக்கை',
   period:'காலகட்டம்', generated:'உருவாக்கப்பட்ட தேதி', customer:'வாடிக்கையாளர்',
   phone:'தொலைபேசி', items:'பொருட்கள்', date:'தேதி',
-  amountPaid:'செலுத்திய தொகை', balance:'இருப்பு',
+  amountPaid:'செலுத்திய தொகை', balance:'பேலன்ஸ் ',
 };
 
 const ITEMS_PER_PAGE = 15;
@@ -276,14 +276,16 @@ function generateInvoiceHTML(sale, lang = 'english') {
         <td style="text-align:center;color:#888;">${startIdx + i + 1}</td>
         <td style="font-weight:600;">${item.riceName || ''}</td>
         <td style="color:#666;">${item.riceType || ''}</td>
+        <td style="color:#666;">${sale.customerCity || ''}</td>
         <td style="text-align:right;">${item.quantity} kg</td>
         <td style="text-align:right;">₹${(item.pricePerKg || 0).toFixed(2)}</td>
         <td style="text-align:right;color:#16a34a;">${(item.itemDiscount || 0) > 0 ? '-₹' + (item.itemDiscount).toFixed(2) : '—'}</td>
         <td style="text-align:right;font-weight:700;color:${BRAND};">₹${(item.totalPrice || 0).toFixed(2)}</td>
+        <td style="border:1px solid #e0e0e0;">&nbsp;</td>
       </tr>`).join('');
 
     const emptyHTML = Array(emptyRows).fill(0).map(() =>
-      `<tr>${Array(7).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
+      `<tr>${Array(9).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
     ).join('');
 
     // ── footer varies: last page shows totals, others show "continued" ──────
@@ -295,15 +297,7 @@ function generateInvoiceHTML(sale, lang = 'english') {
           <div class="eoe">E &amp; O E</div>
         </div>
         <div class="totals-cell">
-          <div class="totals-row">
-            <span style="color:#555;">${L('Subtotal', TAMIL.subtotal)}</span>
-            <strong style="font-family:monospace;">₹${(sale.subtotal || 0).toFixed(2)}</strong>
-          </div>
-          ${(sale.discount || 0) > 0 ? `
-          <div class="totals-row">
-            <span style="color:#16a34a;">${L('Discount', TAMIL.discount)}</span>
-            <strong style="font-family:monospace;color:#16a34a;">-₹${(sale.discount).toFixed(2)}</strong>
-          </div>` : ''}
+
           ${sale.tax > 0 ? `
           <div class="totals-row">
             <span style="color:#1d4ed8;">${L('CGST', TAMIL.cgst)} (${sale.tax / 2}%)</span>
@@ -350,7 +344,7 @@ function generateInvoiceHTML(sale, lang = 'english') {
         <!-- HEADER -->
         <div class="hdr">
           <div>
-            <div class="shop-name">🌾 ${isTamil ? 'சாகா அரிசி கடை' : 'Saka Rice Shop'}</div>
+            <div class="shop-name">🌾 ${isTamil ? 'சகா அரிசி கடை' : 'Saka Rice Shop'}</div>
             <div class="shop-sub">${isTamil ? 'உயர்தர அரிசி வியாபாரிகள்' : 'Premium Rice Traders & Wholesalers'}</div>
             <div class="shop-info">GSTIN: 33XXXXX0000X1ZX &nbsp;|&nbsp; +91 99999 99999</div>
           </div>
@@ -391,10 +385,12 @@ function generateInvoiceHTML(sale, lang = 'english') {
               <th style="width:28px;text-align:center;">#</th>
               <th style="text-align:left;min-width:120px;">${L('Rice Item', TAMIL.riceItem)}</th>
               <th style="text-align:left;width:60px;">${L('Type', TAMIL.type)}</th>
+              <th style="text-align:left;width:70px;">${L('Address', 'ஊர்')}</th>
               <th style="text-align:right;width:60px;">${L('Qty', TAMIL.qty)}</th>
               <th style="text-align:right;width:68px;">${L('Rate', TAMIL.rate)}</th>
               <th style="text-align:right;width:68px;">${L('Disc', TAMIL.disc)}</th>
               <th style="text-align:right;width:76px;">${L('Amount', TAMIL.amount)}</th>
+              <th style="text-align:center;width:70px;">${L('Received', 'பெற்றது')}</th>
             </tr>
           </thead>
           <tbody>
@@ -508,8 +504,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
     { label: L('Date', TAMIL.date),     cls: '' },
     { label: L('Customer', TAMIL.customer), cls: '' },
     { label: L('Phone', TAMIL.phone),   cls: '' },
-    { label: L('Subtotal', TAMIL.subtotal), cls: 'r' },
-    { label: L('Discount', TAMIL.discount), cls: 'r' },
+    { label: L('Address/City', 'ஊர்'), cls: '' },
     { label: L('Total', TAMIL.total),   cls: 'r' },
     { label: L('Paid', TAMIL.paid),     cls: 'r' },
     { label: L('Balance', TAMIL.balance), cls: 'r' },
@@ -542,8 +537,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
           <td style="white-space:nowrap;">${new Date(sale.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
           <td style="font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${custName}</td>
           <td style="color:#555;">${sale.customerPhone || '—'}</td>
-          <td class="r">₹${(sale.subtotal || 0).toFixed(2)}</td>
-          <td class="r" style="color:#16a34a;">${(sale.discount || 0) > 0 ? '-₹' + (sale.discount).toFixed(2) : '—'}</td>
+          <td style="color:#666;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sale.customerCity || sale.customerAddress || '—'}</td>
           <td class="r" style="font-weight:700;">₹${(sale.totalAmount || 0).toFixed(2)}</td>
           <td class="r" style="color:#166534;font-weight:700;">₹${paidAmt.toFixed(2)}</td>
           <td class="r" style="color:${balAmt > 0 ? '#b91c1c' : '#166534'};font-weight:700;">
@@ -557,7 +551,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
     }).join('');
 
     const emptyHTML = Array(emptyRows).fill(0).map(() =>
-      `<tr class="odd">${Array(11).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
+      `<tr class="odd">${Array(10).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
     ).join('');
 
     // Grand total tfoot — only on last page, inside the table
@@ -568,8 +562,6 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
             ${L('TOTAL', 'மொத்தம்')} — ${sales.length} ${L('invoices', TAMIL.invoices)}
           </td>
           <td></td>
-          <td class="r">₹${grandSubtotal.toFixed(2)}</td>
-          <td class="r" style="color:#bbf7d0;">-₹${grandDisc.toFixed(2)}</td>
           <td class="r" style="font-size:11px;">₹${grandTotal.toFixed(2)}</td>
           <td class="r" style="color:#bbf7d0;">₹${grandPaid.toFixed(2)}</td>
           <td class="r" style="color:#fecaca;">₹${grandBalance.toFixed(2)}</td>
@@ -600,7 +592,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
         </div>
       </div>
       <div class="footer-note">
-        ${L('Computer Generated Sales Report — Saka Rice Shop', 'கணினி மூலம் உருவாக்கப்பட்ட விற்பனை அறிக்கை — சாகா அரிசி கடை')}
+        ${L('Computer Generated Sales Report — Saka Rice Shop', 'கணினி மூலம் உருவாக்கப்பட்ட விற்பனை அறிக்கை — சகா அரிசி கடை')}
       </div>` : `<div class="continue-note">
         ${L('Continued on next page...', TAMIL.continued)} &nbsp;
         ${L('Page', TAMIL.page)} ${pi + 1} / ${total}
@@ -611,7 +603,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
         <!-- HEADER -->
         <div class="hdr">
           <div>
-            <div class="shop-name">🌾 ${isTamil ? 'சாகா அரிசி கடை' : 'Saka Rice Shop'}</div>
+            <div class="shop-name">🌾 ${isTamil ? 'சகா அரிசி கடை' : 'Saka Rice Shop'}</div>
             <div class="shop-sub">${L('Sales History Report', TAMIL.salesReport)}</div>
           </div>
           <div style="text-align:right;">
@@ -968,6 +960,36 @@ function NewBillForm({ riceItems, onSuccess }) {
   const [amountPaid, setAmountPaid] = useState(0);
   const [notes, setNotes]       = useState('');
   const [saving, setSaving]     = useState(false);
+  // Customer search dropdown
+  const [savedCustomers, setSavedCustomers] = useState([]);
+  const [custSearch, setCustSearch] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropRef = useRef(null);
+
+  useEffect(() => {
+    getCustomersPending().then(r => setSavedCustomers(r.data.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handler = e => { if (dropRef.current && !dropRef.current.contains(e.target)) setShowDropdown(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const filteredCustomers = custSearch.trim()
+    ? savedCustomers.filter(c =>
+        c.name?.toLowerCase().includes(custSearch.toLowerCase()) ||
+        c.phone?.includes(custSearch) ||
+        c.city?.toLowerCase().includes(custSearch.toLowerCase()) ||
+        c.address?.toLowerCase().includes(custSearch.toLowerCase())
+      )
+    : savedCustomers;
+
+  const selectCustomer = c => {
+    setCustomer({ name: c.name, nameTamil: '', phone: c.phone || '', address: c.address || '', city: c.city || '', addressTamil: '' });
+    setCustSearch('');
+    setShowDropdown(false);
+  };
 
   const addItem    = () => setItems(p=>[...p,{rice:'',quantity:'',itemDiscount:0}]);
   const removeItem = i  => setItems(p=>p.filter((_,idx)=>idx!==i));
@@ -1018,6 +1040,50 @@ function NewBillForm({ riceItems, onSuccess }) {
       {/* Customer */}
       <div className="card p-5">
         <h3 className="font-display text-base font-bold text-gray-900 mb-4 flex items-center gap-2"><User className="w-4 h-4 text-brand-500"/> Customer Details</h3>
+
+        {/* Search saved customers */}
+        <div className="mb-4 relative" ref={dropRef}>
+          <label className="label">Search Saved Customer</label>
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+            <input
+              className="input-field pl-9"
+              placeholder="Type name, phone, city / பெயர், ஊர்..."
+              value={custSearch}
+              onChange={e=>{ setCustSearch(e.target.value); setShowDropdown(true); }}
+              onFocus={()=>setShowDropdown(true)}
+            />
+          </div>
+          {showDropdown && filteredCustomers.length > 0 && (
+            <div className="absolute z-40 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-56 overflow-y-auto">
+              {filteredCustomers.map(c => {
+                const pending = c.pendingAmount || 0;
+                return (
+                  <button
+                    key={c._id}
+                    type="button"
+                    onMouseDown={()=>selectCustomer(c)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-orange-50 border-b border-gray-100 last:border-0 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-sm text-gray-900">{c.name}</span>
+                        {c.nameTamil && <span className="text-xs text-gray-500 ml-2">{c.nameTamil}</span>}
+                        <div className="text-xs text-gray-400 mt-0.5">{c.phone && <span>{c.phone}</span>}{c.city && <span className="ml-2">• {c.city}</span>}</div>
+                      </div>
+                      {pending > 0 && (
+                        <span className="flex-shrink-0 text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                          ₹{pending.toFixed(2)} pending
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div><label className="label">Customer Name (English) *</label>
             <div className="relative"><User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
@@ -1340,7 +1406,7 @@ function InvoiceHistory({ refresh, riceItems }) {
           <div className="flex-1 min-w-48">
             <label className="label">Search</label>
             <div className="relative"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-              <input className="input-field pl-9" placeholder="Invoice #, name, phone, address, city…" value={search} onChange={e=>setSearch(e.target.value)}/>
+              <input className="input-field pl-9" placeholder="Invoice, name, phone, city / பெயர், ஊர்…" value={search} onChange={e=>setSearch(e.target.value)}/>
             </div>
           </div>
           <button type="submit" className="btn-primary"><Search className="w-4 h-4"/> Search</button>

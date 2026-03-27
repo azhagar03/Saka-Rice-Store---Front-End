@@ -161,12 +161,12 @@ const TAMIL = {
   status:'நிலை', method:'முறை', by:'செய்தவர்', page:'பக்கம்',
   continued:'அடுத்த பக்கத்தில் தொடர்கிறது',
   customerSeal:'வாங்குபவரின் முத்திரை & கையொப்பம்',
-  forShop:'சாகா அரிசி கடைக்காக',
+  forShop:'சகா அரிசி கடைக்காக',
   computerGenerated:'கணினி மூலம் உருவாக்கப்பட்ட விலைப்பட்டியல்',
   total:'மொத்தம்', invoices:'விலைப்பட்டியல்கள்', salesReport:'விற்பனை அறிக்கை',
   period:'காலகட்டம்', generated:'உருவாக்கப்பட்ட தேதி', customer:'வாடிக்கையாளர்',
   phone:'தொலைபேசி', items:'பொருட்கள்', date:'தேதி',
-  amountPaid:'செலுத்திய தொகை', balance:'இருப்பு',
+  amountPaid:'செலுத்திய தொகை', balance:'பேலன்ஸ் ',
 };
 
 const ITEMS_PER_PAGE = 15;
@@ -271,14 +271,16 @@ function generateInvoiceHTML(sale, lang = 'english') {
         <td style="text-align:center;color:#888;">${startIdx + i + 1}</td>
         <td style="font-weight:600;">${item.riceName || ''}</td>
         <td style="color:#666;">${item.riceType || ''}</td>
+        <td style="color:#666;">${sale.customerCity || ''}</td>
         <td style="text-align:right;">${item.quantity} kg</td>
         <td style="text-align:right;">₹${(item.pricePerKg || 0).toFixed(2)}</td>
         <td style="text-align:right;color:#16a34a;">${(item.itemDiscount || 0) > 0 ? '-₹' + (item.itemDiscount).toFixed(2) : '—'}</td>
         <td style="text-align:right;font-weight:700;color:${BRAND};">₹${(item.totalPrice || 0).toFixed(2)}</td>
+        <td style="border:1px solid #e0e0e0;">&nbsp;</td>
       </tr>`).join('');
 
     const emptyHTML = Array(emptyRows).fill(0).map(() =>
-      `<tr>${Array(7).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
+      `<tr>${Array(9).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
     ).join('');
 
     // ── footer varies: last page shows totals, others show "continued" ──────
@@ -290,15 +292,7 @@ function generateInvoiceHTML(sale, lang = 'english') {
           <div class="eoe">E &amp; O E</div>
         </div>
         <div class="totals-cell">
-          <div class="totals-row">
-            <span style="color:#555;">${L('Subtotal', TAMIL.subtotal)}</span>
-            <strong style="font-family:monospace;">₹${(sale.subtotal || 0).toFixed(2)}</strong>
-          </div>
-          ${(sale.discount || 0) > 0 ? `
-          <div class="totals-row">
-            <span style="color:#16a34a;">${L('Discount', TAMIL.discount)}</span>
-            <strong style="font-family:monospace;color:#16a34a;">-₹${(sale.discount).toFixed(2)}</strong>
-          </div>` : ''}
+
           ${sale.tax > 0 ? `
           <div class="totals-row">
             <span style="color:#1d4ed8;">${L('CGST', TAMIL.cgst)} (${sale.tax / 2}%)</span>
@@ -345,7 +339,7 @@ function generateInvoiceHTML(sale, lang = 'english') {
         <!-- HEADER -->
         <div class="hdr">
           <div>
-            <div class="shop-name">🌾 ${isTamil ? 'சாகா அரிசி கடை' : 'Saka Rice Shop'}</div>
+            <div class="shop-name">🌾 ${isTamil ? 'சகா அரிசி கடை' : 'Saka Rice Shop'}</div>
             <div class="shop-sub">${isTamil ? 'உயர்தர அரிசி வியாபாரிகள்' : 'Premium Rice Traders & Wholesalers'}</div>
             <div class="shop-info">GSTIN: 33XXXXX0000X1ZX &nbsp;|&nbsp; +91 99999 99999</div>
           </div>
@@ -503,8 +497,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
     { label: L('Date', TAMIL.date),     cls: '' },
     { label: L('Customer', TAMIL.customer), cls: '' },
     { label: L('Phone', TAMIL.phone),   cls: '' },
-    { label: L('Subtotal', TAMIL.subtotal), cls: 'r' },
-    { label: L('Discount', TAMIL.discount), cls: 'r' },
+    { label: L('Address/City', 'ஊர்'), cls: '' },
     { label: L('Total', TAMIL.total),   cls: 'r' },
     { label: L('Paid', TAMIL.paid),     cls: 'r' },
     { label: L('Balance', TAMIL.balance), cls: 'r' },
@@ -537,8 +530,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
           <td style="white-space:nowrap;">${new Date(sale.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
           <td style="font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${custName}</td>
           <td style="color:#555;">${sale.customerPhone || '—'}</td>
-          <td class="r">₹${(sale.subtotal || 0).toFixed(2)}</td>
-          <td class="r" style="color:#16a34a;">${(sale.discount || 0) > 0 ? '-₹' + (sale.discount).toFixed(2) : '—'}</td>
+          <td style="color:#666;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sale.customerCity || sale.customerAddress || '—'}</td>
           <td class="r" style="font-weight:700;">₹${(sale.totalAmount || 0).toFixed(2)}</td>
           <td class="r" style="color:#166534;font-weight:700;">₹${paidAmt.toFixed(2)}</td>
           <td class="r" style="color:${balAmt > 0 ? '#b91c1c' : '#166534'};font-weight:700;">
@@ -552,7 +544,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
     }).join('');
 
     const emptyHTML = Array(emptyRows).fill(0).map(() =>
-      `<tr class="odd">${Array(11).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
+      `<tr class="odd">${Array(10).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
     ).join('');
 
     // Grand total tfoot — only on last page, inside the table
@@ -563,8 +555,6 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
             ${L('TOTAL', 'மொத்தம்')} — ${sales.length} ${L('invoices', TAMIL.invoices)}
           </td>
           <td></td>
-          <td class="r">₹${grandSubtotal.toFixed(2)}</td>
-          <td class="r" style="color:#bbf7d0;">-₹${grandDisc.toFixed(2)}</td>
           <td class="r" style="font-size:11px;">₹${grandTotal.toFixed(2)}</td>
           <td class="r" style="color:#bbf7d0;">₹${grandPaid.toFixed(2)}</td>
           <td class="r" style="color:#fecaca;">₹${grandBalance.toFixed(2)}</td>
@@ -595,7 +585,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
         </div>
       </div>
       <div class="footer-note">
-        ${L('Computer Generated Sales Report — Saka Rice Shop', 'கணினி மூலம் உருவாக்கப்பட்ட விற்பனை அறிக்கை — சாகா அரிசி கடை')}
+        ${L('Computer Generated Sales Report — Saka Rice Shop', 'கணினி மூலம் உருவாக்கப்பட்ட விற்பனை அறிக்கை — சகா அரிசி கடை')}
       </div>` : `<div class="continue-note">
         ${L('Continued on next page...', TAMIL.continued)} &nbsp;
         ${L('Page', TAMIL.page)} ${pi + 1} / ${total}
@@ -606,7 +596,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
         <!-- HEADER -->
         <div class="hdr">
           <div>
-            <div class="shop-name">🌾 ${isTamil ? 'சாகா அரிசி கடை' : 'Saka Rice Shop'}</div>
+            <div class="shop-name">🌾 ${isTamil ? 'சகா அரிசி கடை' : 'Saka Rice Shop'}</div>
             <div class="shop-sub">${L('Sales History Report', TAMIL.salesReport)}</div>
           </div>
           <div style="text-align:right;">
@@ -931,7 +921,7 @@ const handlePrint = () => {
           <div className="flex-1 min-w-48">
             <label className="label">Search</label>
             <div className="relative"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-              <input className="input-field pl-9" placeholder="Invoice no, name, phone, address, city..." value={search} onChange={e=>setSearch(e.target.value)}/>
+              <input className="input-field pl-9" placeholder="Invoice, name, phone, city / பெயர், ஊர், மொபைல்..." value={search} onChange={e=>setSearch(e.target.value)}/>
             </div>
           </div>
           <button type="submit" className="btn-primary"><Search className="w-4 h-4"/> Search</button>
