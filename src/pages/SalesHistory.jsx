@@ -16,278 +16,635 @@ const PERIODS = [
 ];
 
 // ── Tamil labels ──────────────────────────────────────────────────────────────
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PASTE THIS ENTIRE BLOCK into your Billing.jsx / SalesHistory.jsx,
+// replacing the existing generateInvoiceHTML, generateReportHTML,
+// chunkArray, and transliteration helpers.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// ── English → Tamil transliteration map ──────────────────────────────────────
+// Covers common consonant+vowel combos used in South-Indian names.
+// Add more pairs here if needed.
+const EN_TO_TAMIL_MAP = [
+  // Longer patterns first (greedy match)
+  ['thi','தி'],['tha','த'],['tho','தோ'],['thu','து'],['thee','தீ'],['the','தே'],
+  ['dha','த'],['dhi','தி'],['dhu','து'],
+  ['sha','ஷா'],['shi','ஷி'],['shu','ஷு'],['sh','ஷ'],
+  ['kha','கா'],['khi','கி'],['khu','கு'],['kh','க'],
+  ['cha','சா'],['chi','சி'],['chu','சு'],['ch','ச'],
+  ['nja','ஞா'],['nj','ஞ'],
+  ['nga','ங'],
+  ['lla','ல்ல'],['ll','ல்ல'],
+  ['rra','ற்ற'],['rr','ற்ற'],
+  ['nna','ன்ன'],['nn','ன்'],
+  ['mma','ம்ம'],['mm','ம்'],
+  ['ssa','ஸ்ஸ'],['ss','ஸ்'],
+  ['tti','ட்டி'],['tt','ட்ட'],
+  ['kki','க்கி'],['kka','க்கா'],['kk','க்க'],
+  ['ppa','ப்ப'],['ppi','ப்பி'],['pp','ப்ப'],
+  ['ntha','ந்த'],['nth','ந்த'],
+  ['nda','ண்ட'],['nd','ன்ட'],
+  ['mb','ம்ப'],
+  ['aa','ஆ'],['ee','ஈ'],['oo','ஊ'],['ii','ஈ'],['uu','ஊ'],
+  ['ai','ஐ'],['au','ஔ'],
+  ['a','அ'],['e','எ'],['i','இ'],['o','ஒ'],['u','உ'],
+  ['ka','கா'],['ki','கி'],['ku','கு'],['ke','கே'],['ko','கோ'],['k','க்'],
+  ['ga','கா'],['gi','கி'],['gu','கு'],['ge','கே'],['go','கோ'],['g','க்'],
+  ['ca','கா'],['ci','சி'],['cu','கு'],['co','கோ'],['c','க்'],
+  ['pa','பா'],['pi','பி'],['pu','பு'],['pe','பே'],['po','போ'],['p','ப்'],
+  ['ba','பா'],['bi','பி'],['bu','பு'],['be','பே'],['bo','போ'],['b','ப்'],
+  ['ta','டா'],['ti','டி'],['tu','டு'],['te','டே'],['to','டோ'],['t','ட்'],
+  ['da','டா'],['di','டி'],['du','டு'],['de','டே'],['do','டோ'],['d','ட்'],
+  ['na','னா'],['ni','னி'],['nu','னு'],['ne','னே'],['no','னோ'],['n','ன்'],
+  ['ma','மா'],['mi','மி'],['mu','மு'],['me','மே'],['mo','மோ'],['m','ம்'],
+  ['ra','ரா'],['ri','ரி'],['ru','ரு'],['re','ரே'],['ro','ரோ'],['r','ர்'],
+  ['la','லா'],['li','லி'],['lu','லு'],['le','லே'],['lo','லோ'],['l','ல்'],
+  ['va','வா'],['vi','வி'],['vu','வு'],['ve','வே'],['vo','வோ'],['v','வ்'],
+  ['wa','வா'],['wi','வி'],['wu','வு'],['we','வே'],['wo','வோ'],['w','வ்'],
+  ['ya','யா'],['yi','யி'],['yu','யு'],['ye','யே'],['yo','யோ'],['y','ய்'],
+  ['za','ஸா'],['zi','ஸி'],['zu','ஸு'],['ze','ஸே'],['zo','ஸோ'],['z','ஸ்'],
+  ['sa','சா'],['si','சி'],['su','சு'],['se','சே'],['so','சோ'],['s','ஸ்'],
+  ['fa','பா'],['fi','பி'],['fu','பு'],['fe','பே'],['fo','போ'],['f','ப்'],
+  ['ha','ஹா'],['hi','ஹி'],['hu','ஹு'],['he','ஹே'],['ho','ஹோ'],['h','ஹ்'],
+  ['x','க்ஸ்'],['q','க்'],
+];
+
+/**
+ * Transliterate an English name to approximate Tamil script.
+ * Used when customerNameTamil is not stored.
+ */
+function transliterateToTamil(name) {
+  if (!name) return '';
+  // Preserve spaces — transliterate word by word
+  return name.split(' ').map(word => {
+    let result = '';
+    let remaining = word.toLowerCase();
+    while (remaining.length > 0) {
+      let matched = false;
+      for (const [en, ta] of EN_TO_TAMIL_MAP) {
+        if (remaining.startsWith(en)) {
+          result += ta;
+          remaining = remaining.slice(en.length);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        // Pass through digits/symbols unchanged
+        result += remaining[0];
+        remaining = remaining.slice(1);
+      }
+    }
+    return result;
+  }).join(' ');
+}
+
+// ── Chunk array into pages ────────────────────────────────────────────────────
+const chunkArray = (arr, size) => {
+  const pages = [];
+  for (let i = 0; i < arr.length; i += size) pages.push(arr.slice(i, i + size));
+  if (pages.length === 0) pages.push([]);
+  return pages;
+};
+
+// ── Number-to-words (English) ─────────────────────────────────────────────────
+const ones  = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+const tensW = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+function numToWords(n) {
+  if (n === 0) return 'Zero';
+  if (n < 0) return 'Minus ' + numToWords(-n);
+  let w = '';
+  if (Math.floor(n/10000000) > 0) { w += numToWords(Math.floor(n/10000000)) + ' Crore '; n %= 10000000; }
+  if (Math.floor(n/100000)   > 0) { w += numToWords(Math.floor(n/100000))   + ' Lakh ';  n %= 100000;   }
+  if (Math.floor(n/1000)     > 0) { w += numToWords(Math.floor(n/1000))     + ' Thousand '; n %= 1000;   }
+  if (Math.floor(n/100)      > 0) { w += numToWords(Math.floor(n/100))      + ' Hundred '; n %= 100;     }
+  if (n >= 20) { w += tensW[Math.floor(n/10)] + ' '; n %= 10; }
+  if (n > 0)   w += ones[n] + ' ';
+  return w.trim();
+}
+function amountWords(amt) {
+  const int = Math.floor(amt), dec = Math.round((amt - int) * 100);
+  let w = numToWords(int) + ' Rupees';
+  if (dec > 0) w += ' and ' + numToWords(dec) + ' Paise';
+  return w + ' Only';
+}
+
+// ── Tamil number-to-words ─────────────────────────────────────────────────────
+const tOnes = ['','ஒன்று','இரண்டு','மூன்று','நான்கு','ஐந்து','ஆறு','ஏழு','எட்டு','ஒன்பது','பத்து','பதினொன்று','பன்னிரண்டு','பதின்மூன்று','பதினான்கு','பதினைந்து','பதினாறு','பதினேழு','பதினெட்டு','பத்தொன்பது'];
+const tTens = ['','','இருபது','முப்பது','நாற்பது','ஐம்பது','அறுபது','எழுபது','எண்பது','தொண்ணூறு'];
+function numToWordsTamil(n) {
+  if (n === 0) return 'சுழியம்';
+  let w = '';
+  if (Math.floor(n/10000000) > 0) { w += numToWordsTamil(Math.floor(n/10000000)) + ' கோடி '; n %= 10000000; }
+  if (Math.floor(n/100000)   > 0) { w += numToWordsTamil(Math.floor(n/100000))   + ' லட்சம் '; n %= 100000; }
+  if (Math.floor(n/1000)     > 0) { w += numToWordsTamil(Math.floor(n/1000))     + ' ஆயிரம் '; n %= 1000; }
+  if (Math.floor(n/100)      > 0) { w += numToWordsTamil(Math.floor(n/100))      + ' நூறு '; n %= 100; }
+  if (n >= 20) { w += tTens[Math.floor(n/10)] + ' '; n %= 10; }
+  if (n > 0)   w += tOnes[n] + ' ';
+  return w.trim();
+}
+function amountWordsTamil(amt) {
+  const int = Math.floor(amt), dec = Math.round((amt - int) * 100);
+  let w = numToWordsTamil(int) + ' ரூபாய்';
+  if (dec > 0) w += ' மற்றும் ' + numToWordsTamil(dec) + ' பைசா';
+  return w + ' மட்டும்';
+}
+
+// ── Tamil label map ───────────────────────────────────────────────────────────
 const TAMIL = {
-  taxInvoice:'வரி விலைப்பட்டியல்',billTo:'வாங்குபவர்',paymentDetails:'கட்டண விவரங்கள்',
-  riceItem:'அரிசி வகை',type:'வகை',qty:'அளவு',rate:'விலை',disc:'தள்ளுபடி',amount:'தொகை',
-  subtotal:'கூட்டுத்தொகை',discount:'தள்ளுபடி',cgst:'மத்திய சரக்கு வரி',sgst:'மாநில சரக்கு வரி',
-  grandTotal:'மொத்தத் தொகை',amountWords:'தொகை வார்த்தைகளில்',
-  paid:'கட்டணம்',pending:'நிலுவை',partial:'பகுதி',cash:'பண மதிப்பு',card:'அட்டை',upi:'யுபிஐ',credit:'கடன்',
-  status:'நிலை',method:'முறை',by:'செய்தவர்',page:'பக்கம்',
+  taxInvoice:'வரி விலைப்பட்டியல்', billTo:'வாங்குபவர்', paymentDetails:'கட்டண விவரங்கள்',
+  riceItem:'அரிசி வகை', type:'வகை', qty:'அளவு', rate:'விலை', disc:'தள்ளுபடி', amount:'தொகை',
+  subtotal:'கூட்டுத்தொகை', discount:'தள்ளுபடி', cgst:'மத்திய சரக்கு வரி', sgst:'மாநில சரக்கு வரி',
+  grandTotal:'மொத்தத் தொகை', amountWords:'தொகை வார்த்தைகளில்',
+  paid:'கட்டணம்', pending:'நிலுவை', partial:'பகுதி',
+  cash:'பண மதிப்பு', card:'அட்டை', upi:'யுபிஐ', credit:'கடன்',
+  status:'நிலை', method:'முறை', by:'செய்தவர்', page:'பக்கம்',
   continued:'அடுத்த பக்கத்தில் தொடர்கிறது',
   customerSeal:'வாங்குபவரின் முத்திரை & கையொப்பம்',
   forShop:'சாக்கா அரிசி கடைக்காக',
   computerGenerated:'கணினி மூலம் உருவாக்கப்பட்ட விலைப்பட்டியல்',
-  total:'மொத்தம்',invoices:'விலைப்பட்டியல்கள்',salesReport:'விற்பனை அறிக்கை',
-  period:'காலகட்டம்',generated:'உருவாக்கப்பட்ட தேதி',customer:'வாடிக்கையாளர்',
-  phone:'தொலைபேசி',items:'பொருட்கள்',date:'தேதி',
-  amountPaid:'செலுத்திய தொகை',balance:'இருப்பு',
+  total:'மொத்தம்', invoices:'விலைப்பட்டியல்கள்', salesReport:'விற்பனை அறிக்கை',
+  period:'காலகட்டம்', generated:'உருவாக்கப்பட்ட தேதி', customer:'வாடிக்கையாளர்',
+  phone:'தொலைபேசி', items:'பொருட்கள்', date:'தேதி',
+  amountPaid:'செலுத்திய தொகை', balance:'இருப்பு',
 };
 
-// ── English number to words ───────────────────────────────────────────────────
-const ones  = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
-const tensW = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
-function numToWords(n) {
-  if (n===0) return 'Zero'; if (n<0) return 'Minus '+numToWords(-n);
-  let w='';
-  if (Math.floor(n/10000000)>0){w+=numToWords(Math.floor(n/10000000))+' Crore ';n%=10000000;}
-  if (Math.floor(n/100000)>0){w+=numToWords(Math.floor(n/100000))+' Lakh ';n%=100000;}
-  if (Math.floor(n/1000)>0){w+=numToWords(Math.floor(n/1000))+' Thousand ';n%=1000;}
-  if (Math.floor(n/100)>0){w+=numToWords(Math.floor(n/100))+' Hundred ';n%=100;}
-  if (n>=20){w+=tensW[Math.floor(n/10)]+' ';n%=10;} if(n>0)w+=ones[n]+' ';
-  return w.trim();
-}
-function amountWords(amt) {
-  const int=Math.floor(amt),dec=Math.round((amt-int)*100);
-  let w=numToWords(int)+' Rupees';
-  if(dec>0)w+=' and '+numToWords(dec)+' Paise';
-  return w+' Only';
-}
+const ITEMS_PER_PAGE = 15;
+const BRAND = '#d4831e';
 
-// ── Tamil number to words ─────────────────────────────────────────────────────
-const tOnes=['','ஒன்று','இரண்டு','மூன்று','நான்கு','ஐந்து','ஆறு','ஏழு','எட்டு','ஒன்பது','பத்து','பதினொன்று','பன்னிரண்டு','பதின்மூன்று','பதினான்கு','பதினைந்து','பதினாறு','பதினேழு','பதினெட்டு','பத்தொன்பது'];
-const tTens=['','','இருபது','முப்பது','நாற்பது','ஐம்பது','அறுபது','எழுபது','எண்பது','தொண்ணூறு'];
-function numToWordsTamil(n) {
-  if(n===0) return 'சுழியம்'; if(n<0) return 'கழித்தல் '+numToWordsTamil(-n);
-  let w='';
-  if(Math.floor(n/10000000)>0){w+=numToWordsTamil(Math.floor(n/10000000))+' கோடி ';n%=10000000;}
-  if(Math.floor(n/100000)>0){w+=numToWordsTamil(Math.floor(n/100000))+' லட்சம் ';n%=100000;}
-  if(Math.floor(n/1000)>0){w+=numToWordsTamil(Math.floor(n/1000))+' ஆயிரம் ';n%=1000;}
-  if(Math.floor(n/100)>0){w+=numToWordsTamil(Math.floor(n/100))+' நூறு ';n%=100;}
-  if(n>=20){w+=tTens[Math.floor(n/10)]+' ';n%=10;} if(n>0)w+=tOnes[n]+' ';
-  return w.trim();
-}
-function amountWordsTamil(amt) {
-  const int=Math.floor(amt),dec=Math.round((amt-int)*100);
-  let w=numToWordsTamil(int)+' ரூபாய்';
-  if(dec>0)w+=' மற்றும் '+numToWordsTamil(dec)+' பைசா';
-  return w+' மட்டும்';
-}
+// ════════════════════════════════════════════════════════════════════════════
+// generateInvoiceHTML  — single invoice, A4 portrait, 15 items/page
+// ════════════════════════════════════════════════════════════════════════════
+function generateInvoiceHTML(sale, lang = 'english') {
+  const isTamil = lang === 'tamil';
+  const L = (en, ta) => isTamil ? ta : en;
 
-const chunkArray=(arr,size)=>{const pages=[];for(let i=0;i<arr.length;i+=size)pages.push(arr.slice(i,i+size));if(pages.length===0)pages.push([]);return pages;};
+  const date    = new Date(sale.createdAt);
+  const pages   = chunkArray(sale.items || [], ITEMS_PER_PAGE);
+  const total   = pages.length;
+  const gstAmt  = sale.tax > 0 ? ((sale.subtotal - (sale.discount || 0)) * sale.tax / 100) : 0;
+  const cgst    = gstAmt / 2;
+  const netAmt  = sale.totalAmount || 0;
+  const paid    = sale.amountPaid || (sale.paymentStatus === 'paid' ? netAmt : 0) || 0;
+  const balance = Math.max(0, netAmt - paid);
 
-function openPrint(html) {
-  const w=window.open('','_blank','width=1000,height=750');
-  if(!w){toast.error('Please allow popups');return;}
-  w.document.write(html); w.document.close();
-  setTimeout(()=>{w.focus();w.print();},900);
-}
+  // Always show Tamil name: prefer stored Tamil name, else transliterate
+  const displayName = isTamil
+    ? (sale.customerNameTamil || transliterateToTamil(sale.customerName))
+    : sale.customerName;
+  const displayAddress = isTamil && sale.customerAddressTamil
+    ? sale.customerAddressTamil
+    : (sale.customerAddress || '');
 
-// ── Single invoice HTML (bilingual) ───────────────────────────────────────────
-function generateInvoiceHTML(sale, lang='english') {
-  const isTamil = lang==='tamil';
-  const L=(en,ta)=>isTamil?ta:en;
-  const date   = new Date(sale.createdAt);
-  const pages  = chunkArray(sale.items||[],ITEMS_PER_A4);
-  const total  = pages.length;
-  const gstAmt = sale.tax>0?((sale.subtotal-(sale.discount||0))*sale.tax/100):0;
-  const cgst   = gstAmt/2;
-  const netAmt = sale.totalAmount||0;
-  const paid   = sale.amountPaid||(sale.paymentStatus==='paid'?netAmt:0)||0;
-  const balance= Math.max(0,netAmt-paid);
+  // ── shared CSS injected once ──────────────────────────────────────────────
+  const css = `
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:#fff;font-family:'Noto Sans Tamil','Segoe UI',Arial,sans-serif;color:#1a1a1a;}
+    @media print{@page{size:A4;margin:0;}body{margin:0;}}
+    .page{
+      width:210mm;min-height:297mm;background:#fff;
+      padding:8mm 10mm;box-sizing:border-box;
+      page-break-after:always;
+      display:flex;flex-direction:column;
+    }
+    .page:last-child{page-break-after:auto;}
+    /* ── header ── */
+    .hdr{display:flex;justify-content:space-between;align-items:flex-start;
+         border-bottom:3px solid ${BRAND};padding-bottom:10px;margin-bottom:12px;}
+    .shop-name{font-size:22px;font-weight:900;color:${BRAND};font-family:Georgia,serif;}
+    .shop-sub{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:2px;margin-top:2px;}
+    .shop-info{font-size:10px;color:#555;margin-top:4px;}
+    .inv-label{font-size:9px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:2px;}
+    .inv-num{font-size:20px;font-weight:900;}
+    .inv-date{font-size:10px;color:#888;margin-top:2px;}
+    .status-pill{display:inline-block;padding:2px 8px;border-radius:20px;
+      font-size:9px;font-weight:700;text-transform:uppercase;margin-top:4px;}
+    /* ── info grid ── */
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;
+               margin-bottom:12px;padding:10px 12px;
+               background:#fdf8f3;border-radius:6px;border:1px solid #f0e0c8;}
+    .info-label{font-size:8px;color:${BRAND};text-transform:uppercase;
+                letter-spacing:1.5px;font-weight:800;margin-bottom:4px;}
+    .info-name{font-weight:800;font-size:13px;}
+    .info-sub{font-size:10px;color:#555;margin-top:2px;}
+    /* ── items table ── */
+    .items-table{width:100%;border-collapse:collapse;font-size:10px;}
+    .items-table thead tr{background:${BRAND};}
+    .items-table th{padding:6px 5px;font-size:9px;font-weight:800;
+                    text-transform:uppercase;color:#fff;white-space:nowrap;}
+    .items-table td{border:1px solid #e0e0e0;padding:5px 5px;vertical-align:middle;}
+    .items-table tbody tr:nth-child(even){background:#fdf9f5;}
+    /* ── totals section ── */
+    .totals-wrap{display:grid;grid-template-columns:1fr 220px;
+                 border-top:2px solid ${BRAND};margin-top:0;}
+    .words-cell{padding:10px 12px;border-right:1px solid #ddd;font-size:10px;}
+    .words-label{font-size:9px;color:#888;margin-bottom:3px;}
+    .words-text{font-weight:700;font-size:10px;line-height:1.5;}
+    .eoe{margin-top:8px;font-size:9px;font-weight:700;color:#888;}
+    .totals-cell{padding:8px 10px;}
+    .totals-row{display:flex;justify-content:space-between;
+                align-items:center;padding:3px 0;border-bottom:1px solid #eee;
+                font-size:10px;}
+    .totals-grand{display:flex;justify-content:space-between;align-items:center;
+                  padding:5px 4px;background:${BRAND};font-size:12px;
+                  font-weight:900;color:#fff;}
+    .totals-balance{display:flex;justify-content:space-between;align-items:center;
+                    padding:4px;background:#fef2f2;font-size:11px;
+                    font-weight:800;color:#b91c1c;}
+    .sig-row{display:flex;justify-content:space-between;
+             padding:8px 12px;border-top:1px solid #ddd;
+             font-size:10px;font-weight:700;}
+    .footer-note{text-align:center;padding:5px;border-top:1px solid #eee;
+                 font-size:9px;color:#aaa;}
+    .continue-note{text-align:right;padding:6px 12px;border-top:1px solid #ddd;
+                   font-size:9px;color:#888;}
+    .spacer{flex:1;}
+  `;
 
-  const displayName    = isTamil&&sale.customerNameTamil    ? sale.customerNameTamil    : sale.customerName;
-  const displayAddress = isTamil&&sale.customerAddressTamil ? sale.customerAddressTamil : (sale.customerAddress||'');
+  const pageHTMLArr = pages.map((pageItems, pi) => {
+    const isLast    = pi === total - 1;
+    const emptyRows = Math.max(0, ITEMS_PER_PAGE - pageItems.length);
+    const startIdx  = pi * ITEMS_PER_PAGE;
 
-  const pageHTML = pages.map((pageItems,pi)=>{
-    const isLast=pi===total-1;
-    const emptyRows=Math.max(0,ITEMS_PER_A4-pageItems.length);
-    const rows=pageItems.map((item,i)=>`
+    const rowsHTML = pageItems.map((item, i) => `
       <tr>
-        <td style="border:1px solid #ddd;padding:6px 8px;font-size:11px;text-align:center;">${(pi*ITEMS_PER_A4)+i+1}</td>
-        <td style="border:1px solid #ddd;padding:6px 8px;font-size:11px;font-weight:600;">${item.riceName}</td>
-        <td style="border:1px solid #ddd;padding:6px 8px;font-size:11px;color:#666;">${item.riceType}</td>
-        <td style="border:1px solid #ddd;padding:6px 8px;font-size:11px;text-align:right;">${item.quantity} kg</td>
-        <td style="border:1px solid #ddd;padding:6px 8px;font-size:11px;text-align:right;">₹${item.pricePerKg?.toFixed(2)}</td>
-        <td style="border:1px solid #ddd;padding:6px 8px;font-size:11px;text-align:right;color:#16a34a;">${item.itemDiscount>0?'-₹'+item.itemDiscount?.toFixed(2):'—'}</td>
-        <td style="border:1px solid #ddd;padding:6px 8px;font-size:11px;text-align:right;font-weight:700;">₹${item.totalPrice?.toFixed(2)}</td>
+        <td style="text-align:center;color:#888;">${startIdx + i + 1}</td>
+        <td style="font-weight:600;">${item.riceName || ''}</td>
+        <td style="color:#666;">${item.riceType || ''}</td>
+        <td style="text-align:right;">${item.quantity} kg</td>
+        <td style="text-align:right;">₹${(item.pricePerKg || 0).toFixed(2)}</td>
+        <td style="text-align:right;color:#16a34a;">${(item.itemDiscount || 0) > 0 ? '-₹' + (item.itemDiscount).toFixed(2) : '—'}</td>
+        <td style="text-align:right;font-weight:700;color:${BRAND};">₹${(item.totalPrice || 0).toFixed(2)}</td>
       </tr>`).join('');
-    const emptyRowsHTML=Array(emptyRows).fill(`<tr>${Array(7).fill('<td style="border:1px solid #eee;padding:6px 8px;">&nbsp;</td>').join('')}</tr>`).join('');
-    const footer=isLast?`
-      <div style="display:grid;grid-template-columns:1fr auto;border-top:2px solid #d4831e;">
-        <div style="padding:12px 16px;border-right:1px solid #ddd;">
-          <div style="font-size:10px;color:#888;margin-bottom:4px;">${L('Amount in Words',TAMIL.amountWords)}</div>
-          <div style="font-weight:700;font-size:11px;">${isTamil?amountWordsTamil(netAmt):amountWords(netAmt)}</div>
-          <div style="margin-top:12px;font-size:10px;font-weight:700;color:#888;">E &amp; O E</div>
+
+    const emptyHTML = Array(emptyRows).fill(0).map(() =>
+      `<tr>${Array(7).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
+    ).join('');
+
+    // ── footer varies: last page shows totals, others show "continued" ──────
+    const footerHTML = isLast ? `
+      <div class="totals-wrap">
+        <div class="words-cell">
+          <div class="words-label">${L('Amount in Words', TAMIL.amountWords)}</div>
+          <div class="words-text">${isTamil ? amountWordsTamil(netAmt) : amountWords(netAmt)}</div>
+          <div class="eoe">E &amp; O E</div>
         </div>
-        <div style="padding:12px 16px;min-width:240px;">
-          <table style="width:100%;border-collapse:collapse;">
-            <tr><td style="font-size:11px;color:#555;padding:4px 0;border-bottom:1px solid #eee;">${L('Subtotal',TAMIL.subtotal)}</td>
-                <td style="font-size:11px;font-weight:700;text-align:right;padding:4px 0;border-bottom:1px solid #eee;">₹${sale.subtotal?.toFixed(2)}</td></tr>
-            ${sale.discount>0?`<tr><td style="font-size:11px;color:#16a34a;padding:4px 0;border-bottom:1px solid #eee;">${L('Discount',TAMIL.discount)}</td>
-                <td style="font-size:11px;font-weight:700;text-align:right;color:#16a34a;padding:4px 0;border-bottom:1px solid #eee;">-₹${sale.discount?.toFixed(2)}</td></tr>`:''}
-            ${sale.tax>0?`<tr><td style="font-size:11px;color:#1d4ed8;padding:4px 0;border-bottom:1px solid #eee;">${L(`CGST (${sale.tax/2}%)`,`${TAMIL.cgst} (${sale.tax/2}%)`)}</td>
-                <td style="font-size:11px;font-weight:700;text-align:right;color:#1d4ed8;padding:4px 0;border-bottom:1px solid #eee;">₹${cgst.toFixed(2)}</td></tr>
-            <tr><td style="font-size:11px;color:#1d4ed8;padding:4px 0;border-bottom:1px solid #eee;">${L(`SGST (${sale.tax/2}%)`,`${TAMIL.sgst} (${sale.tax/2}%)`)}</td>
-                <td style="font-size:11px;font-weight:700;text-align:right;color:#1d4ed8;padding:4px 0;border-bottom:1px solid #eee;">₹${cgst.toFixed(2)}</td></tr>`:''}
-            <tr style="background:#d4831e;"><td style="font-size:13px;font-weight:800;padding:6px 4px;color:white;">${L('Grand Total',TAMIL.grandTotal)}</td>
-                <td style="font-size:13px;font-weight:900;text-align:right;color:white;padding:6px 4px;">₹${netAmt.toFixed(2)}</td></tr>
-            ${paid>0?`<tr><td style="font-size:11px;color:#166534;padding:4px 0;border-bottom:1px solid #eee;">${L('Amount Paid',TAMIL.amountPaid)}</td>
-                <td style="font-size:11px;font-weight:700;text-align:right;color:#166534;padding:4px 0;border-bottom:1px solid #eee;">₹${paid.toFixed(2)}</td></tr>`:''}
-            ${balance>0?`<tr style="background:#fef2f2;"><td style="font-size:12px;font-weight:800;color:#b91c1c;padding:5px 4px;">${L('Balance Due',TAMIL.balance)}</td>
-                <td style="font-size:12px;font-weight:900;text-align:right;color:#b91c1c;padding:5px 4px;">₹${balance.toFixed(2)}</td></tr>`:''}
-          </table>
+        <div class="totals-cell">
+          <div class="totals-row">
+            <span style="color:#555;">${L('Subtotal', TAMIL.subtotal)}</span>
+            <strong style="font-family:monospace;">₹${(sale.subtotal || 0).toFixed(2)}</strong>
+          </div>
+          ${(sale.discount || 0) > 0 ? `
+          <div class="totals-row">
+            <span style="color:#16a34a;">${L('Discount', TAMIL.discount)}</span>
+            <strong style="font-family:monospace;color:#16a34a;">-₹${(sale.discount).toFixed(2)}</strong>
+          </div>` : ''}
+          ${sale.tax > 0 ? `
+          <div class="totals-row">
+            <span style="color:#1d4ed8;">${L('CGST', TAMIL.cgst)} (${sale.tax / 2}%)</span>
+            <strong style="font-family:monospace;color:#1d4ed8;">₹${cgst.toFixed(2)}</strong>
+          </div>
+          <div class="totals-row">
+            <span style="color:#1d4ed8;">${L('SGST', TAMIL.sgst)} (${sale.tax / 2}%)</span>
+            <strong style="font-family:monospace;color:#1d4ed8;">₹${cgst.toFixed(2)}</strong>
+          </div>` : ''}
+          <div class="totals-grand">
+            <span>${L('Grand Total', TAMIL.grandTotal)}</span>
+            <span style="font-family:monospace;">₹${netAmt.toFixed(2)}</span>
+          </div>
+          ${paid > 0 ? `
+          <div class="totals-row" style="margin-top:2px;">
+            <span style="color:#166534;">${L('Amount Paid', TAMIL.amountPaid)}</span>
+            <strong style="font-family:monospace;color:#166534;">₹${paid.toFixed(2)}</strong>
+          </div>` : ''}
+          ${balance > 0 ? `
+          <div class="totals-balance">
+            <span>${L('Balance Due', TAMIL.balance)}</span>
+            <span style="font-family:monospace;">₹${balance.toFixed(2)}</span>
+          </div>` : ''}
         </div>
       </div>
-      <div style="display:flex;justify-content:space-between;padding:12px 16px;border-top:1px solid #ddd;font-size:11px;font-weight:700;">
-        <span>${L("Customer's Seal & Signature",TAMIL.customerSeal)}</span>
-        <span>${L('For Saka Rice Shop',TAMIL.forShop)}</span>
+      <div class="sig-row">
+        <span>${L("Customer's Seal & Signature", TAMIL.customerSeal)}</span>
+        <span>${L('For Saka Rice Shop', TAMIL.forShop)}</span>
       </div>
-      <div style="text-align:center;padding:8px;border-top:1px solid #eee;font-size:10px;color:#999;">${L('This is a Computer Generated Invoice',TAMIL.computerGenerated)}</div>`
-      :`<div style="text-align:right;padding:8px 16px;border-top:1px solid #ddd;font-size:10px;color:#888;">${L('Continued...',TAMIL.continued)} ${L('Page',TAMIL.page)} ${pi+1}/${total}</div>`;
+      <div class="footer-note">
+        ${L('This is a Computer Generated Invoice — No signature required', TAMIL.computerGenerated)}
+      </div>`
+    : `<div class="continue-note">
+        ${L('Continued on next page...', TAMIL.continued)} &nbsp;
+        ${L('Page', TAMIL.page)} ${pi + 1} / ${total}
+      </div>`;
+
+    const statusBg    = sale.paymentStatus === 'paid' ? '#dcfce7' : '#fef9c3';
+    const statusColor = sale.paymentStatus === 'paid' ? '#166534' : '#854d0e';
+    const statusLabel = isTamil ? (TAMIL[sale.paymentStatus] || sale.paymentStatus) : sale.paymentStatus?.toUpperCase();
 
     return `
-      <div style="width:210mm;min-height:297mm;background:#fff;font-family:'Noto Sans Tamil','Segoe UI',Arial,sans-serif;color:#1a1a1a;padding:10mm;box-sizing:border-box;page-break-after:${isLast?'auto':'always'};">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;border-bottom:3px solid #d4831e;margin-bottom:20px;">
+      <div class="page">
+        <!-- HEADER -->
+        <div class="hdr">
           <div>
-            <div style="font-size:24px;font-weight:900;color:#d4831e;font-family:Georgia,serif;">🌾 ${isTamil?'சாக்கா அரிசி கடை':'Saka Rice Shop'}</div>
-            <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:2px;margin-top:2px;">${isTamil?'உயர்தர அரிசி வியாபாரிகள்':'Premium Rice Traders & Wholesalers'}</div>
-            <div style="font-size:11px;color:#555;margin-top:5px;">GSTIN: 33XXXXX0000X1ZX &nbsp;|&nbsp; +91 99999 99999</div>
+            <div class="shop-name">🌾 ${isTamil ? 'சாக்கா அரிசி கடை' : 'Saka Rice Shop'}</div>
+            <div class="shop-sub">${isTamil ? 'உயர்தர அரிசி வியாபாரிகள்' : 'Premium Rice Traders & Wholesalers'}</div>
+            <div class="shop-info">GSTIN: 33XXXXX0000X1ZX &nbsp;|&nbsp; +91 99999 99999</div>
           </div>
           <div style="text-align:right;">
-            <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:2px;">${L('Tax Invoice',TAMIL.taxInvoice)}</div>
-            <div style="font-size:22px;font-weight:900;">#${sale.invoiceNumber}</div>
-            <div style="font-size:11px;color:#888;margin-top:3px;">${date.toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})}</div>
-            <div style="margin-top:5px;display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;background:${sale.paymentStatus==='paid'?'#dcfce7':'#fef9c3'};color:${sale.paymentStatus==='paid'?'#166534':'#854d0e'};">${isTamil?(TAMIL[sale.paymentStatus]||sale.paymentStatus):sale.paymentStatus?.toUpperCase()}</div>
+            <div class="inv-label">${L('Tax Invoice', TAMIL.taxInvoice)}</div>
+            <div class="inv-num">#${sale.invoiceNumber}</div>
+            <div class="inv-date">${date.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+            <span class="status-pill" style="background:${statusBg};color:${statusColor};">${statusLabel}</span>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;padding:14px;background:#fdf8f3;border-radius:8px;border:1px solid #f0e0c8;">
-          <div>
-            <div style="font-size:9px;color:#d4831e;text-transform:uppercase;letter-spacing:1.5px;font-weight:800;margin-bottom:5px;">${L('Bill To',TAMIL.billTo)}</div>
-            <div style="font-weight:800;font-size:14px;">${displayName}</div>
-            ${sale.customerPhone?`<div style="font-size:12px;color:#555;margin-top:3px;">📞 ${sale.customerPhone}</div>`:''}
-            ${displayAddress?`<div style="font-size:12px;color:#555;margin-top:2px;">📍 ${displayAddress}</div>`:''}
-            ${sale.customerCity?`<div style="font-size:11px;color:#888;margin-top:1px;">${sale.customerCity}</div>`:''}
-          </div>
-          <div>
-            <div style="font-size:9px;color:#d4831e;text-transform:uppercase;letter-spacing:1.5px;font-weight:800;margin-bottom:5px;">${L('Payment Details',TAMIL.paymentDetails)}</div>
-            <div style="font-size:12px;font-weight:700;text-transform:capitalize;">${isTamil?(TAMIL[sale.paymentMethod]||sale.paymentMethod):sale.paymentMethod}</div>
-            <div style="font-size:11px;color:#555;margin-top:2px;">${L('Status',TAMIL.status)}: ${isTamil?(TAMIL[sale.paymentStatus]||sale.paymentStatus):sale.paymentStatus}</div>
-            ${paid>0?`<div style="font-size:11px;color:#166534;font-weight:700;margin-top:2px;">${L('Paid',TAMIL.paid)}: ₹${paid.toFixed(2)}</div>`:''}
-            ${balance>0?`<div style="font-size:11px;color:#b91c1c;font-weight:700;margin-top:2px;">${L('Balance',TAMIL.balance)}: ₹${balance.toFixed(2)}</div>`:''}
-            <div style="font-size:11px;color:#888;margin-top:2px;">${L('Page',TAMIL.page)} ${pi+1}/${total}</div>
-          </div>
-        </div>
-        <table style="width:100%;border-collapse:collapse;">
-          <thead><tr style="background:#d4831e;">
-            <th style="padding:8px;font-size:10px;font-weight:800;text-transform:uppercase;color:white;text-align:center;width:32px;">#</th>
-            <th style="padding:8px;font-size:10px;font-weight:800;text-transform:uppercase;color:white;text-align:left;">${L('Rice Item',TAMIL.riceItem)}</th>
-            <th style="padding:8px;font-size:10px;font-weight:800;text-transform:uppercase;color:white;text-align:left;width:70px;">${L('Type',TAMIL.type)}</th>
-            <th style="padding:8px;font-size:10px;font-weight:800;text-transform:uppercase;color:white;text-align:right;width:65px;">${L('Qty',TAMIL.qty)}</th>
-            <th style="padding:8px;font-size:10px;font-weight:800;text-transform:uppercase;color:white;text-align:right;width:72px;">${L('Rate',TAMIL.rate)}</th>
-            <th style="padding:8px;font-size:10px;font-weight:800;text-transform:uppercase;color:white;text-align:right;width:72px;">${L('Disc',TAMIL.disc)}</th>
-            <th style="padding:8px;font-size:10px;font-weight:800;text-transform:uppercase;color:white;text-align:right;width:80px;">${L('Amount',TAMIL.amount)}</th>
-          </tr></thead>
-          <tbody>${rows}${emptyRowsHTML}</tbody>
-        </table>
-        ${footer}
-      </div>`;
-  }).join('');
 
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice #${sale.invoiceNumber}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;font-family:'Noto Sans Tamil','Segoe UI',Arial,sans-serif;}
-    @media print{@page{size:A4;margin:0;}body{margin:0;}}</style>
-  </head><body>${pageHTML}</body></html>`;
+        <!-- INFO GRID -->
+        <div class="info-grid">
+          <div>
+            <div class="info-label">${L('Bill To', TAMIL.billTo)}</div>
+            <div class="info-name">${displayName}</div>
+            ${sale.customerPhone ? `<div class="info-sub">📞 ${sale.customerPhone}</div>` : ''}
+            ${displayAddress ? `<div class="info-sub">📍 ${displayAddress}</div>` : ''}
+            ${sale.customerCity ? `<div class="info-sub" style="color:#888;font-size:9px;">${sale.customerCity}</div>` : ''}
+          </div>
+          <div>
+            <div class="info-label">${L('Payment Details', TAMIL.paymentDetails)}</div>
+            <div class="info-sub" style="font-weight:700;font-size:11px;text-transform:capitalize;">
+              ${isTamil ? (TAMIL[sale.paymentMethod] || sale.paymentMethod) : sale.paymentMethod}
+            </div>
+            <div class="info-sub">${L('Status', TAMIL.status)}: ${isTamil ? (TAMIL[sale.paymentStatus] || sale.paymentStatus) : sale.paymentStatus}</div>
+            ${paid > 0 ? `<div class="info-sub" style="color:#166534;font-weight:700;">${L('Paid', TAMIL.paid)}: ₹${paid.toFixed(2)}</div>` : ''}
+            ${balance > 0 ? `<div class="info-sub" style="color:#b91c1c;font-weight:700;">${L('Balance', TAMIL.balance)}: ₹${balance.toFixed(2)}</div>` : ''}
+            ${sale.soldBy ? `<div class="info-sub">${L('By', TAMIL.by)}: ${sale.soldBy}</div>` : ''}
+            <div class="info-sub" style="color:#aaa;">${L('Page', TAMIL.page)} ${pi + 1} / ${total}</div>
+          </div>
+        </div>
+
+        <!-- ITEMS TABLE -->
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th style="width:28px;text-align:center;">#</th>
+              <th style="text-align:left;min-width:120px;">${L('Rice Item', TAMIL.riceItem)}</th>
+              <th style="text-align:left;width:60px;">${L('Type', TAMIL.type)}</th>
+              <th style="text-align:right;width:60px;">${L('Qty', TAMIL.qty)}</th>
+              <th style="text-align:right;width:68px;">${L('Rate', TAMIL.rate)}</th>
+              <th style="text-align:right;width:68px;">${L('Disc', TAMIL.disc)}</th>
+              <th style="text-align:right;width:76px;">${L('Amount', TAMIL.amount)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHTML}
+            ${emptyHTML}
+          </tbody>
+        </table>
+
+        <div class="spacer"></div>
+
+        <!-- FOOTER / TOTALS -->
+        ${footerHTML}
+      </div>`;
+  });
+
+  return `<!DOCTYPE html>
+<html lang="${isTamil ? 'ta' : 'en'}">
+<head>
+  <meta charset="UTF-8">
+  <title>Invoice #${sale.invoiceNumber}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>${css}</style>
+</head>
+<body>${pageHTMLArr.join('')}</body>
+</html>`;
 }
 
-// ── Sales Report HTML (bilingual, landscape) ──────────────────────────────────
-function generateReportHTML(sales, periodLabel, lang='english') {
-  const isTamil = lang==='tamil';
-  const L=(en,ta)=>isTamil?ta:en;
-  const pages=chunkArray(sales,ITEMS_PER_A4), total=pages.length;
-  const date=new Date().toLocaleDateString('en-IN');
-  const grandTotal   = sales.reduce((s,i)=>s+(i.totalAmount||0),0);
-  const grandSubtotal= sales.reduce((s,i)=>s+(i.subtotal||0),0);
-  const grandDisc    = sales.reduce((s,i)=>s+(i.discount||0),0);
-  const grandPaid    = sales.reduce((s,i)=>s+(i.amountPaid||(i.paymentStatus==='paid'?i.totalAmount:0)||0),0);
-  const grandBalance = Math.max(0,grandTotal-grandPaid);
+// ════════════════════════════════════════════════════════════════════════════
+// generateReportHTML — Sales Report, A4 landscape, 15 rows/page
+//   • Every page has a proper column-aligned table.
+//   • LAST page has the grand-total row inside the table <tfoot>
+//     PLUS the summary cards below.
+//   • Customer names are transliterated to Tamil when isTamil.
+// ════════════════════════════════════════════════════════════════════════════
+function generateReportHTML(sales, periodLabel, lang = 'english') {
+  const isTamil = lang === 'tamil';
+  const L = (en, ta) => isTamil ? ta : en;
 
-  const pageHTML=pages.map((pageSales,pi)=>{
-    const isLast=pi===total-1, emptyRows=Math.max(0,ITEMS_PER_A4-pageSales.length);
-    const rows=pageSales.map((sale,i)=>{
-      const paid   = sale.amountPaid||(sale.paymentStatus==='paid'?sale.totalAmount:0)||0;
-      const balance= Math.max(0,(sale.totalAmount||0)-paid);
-      const displayName=isTamil&&sale.customerNameTamil?sale.customerNameTamil:sale.customerName;
-      return `<tr style="background:${((pi*ITEMS_PER_A4+i)%2===0)?'#fff':'#fdf8f3'};">
-        <td style="border:1px solid #ddd;padding:5px 7px;font-size:10px;font-weight:700;color:#d4831e;">#${sale.invoiceNumber}</td>
-        <td style="border:1px solid #ddd;padding:5px 7px;font-size:10px;">${new Date(sale.createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</td>
-        <td style="border:1px solid #ddd;padding:5px 7px;font-size:10px;font-weight:600;">${displayName}</td>
-        <td style="border:1px solid #ddd;padding:5px 7px;font-size:10px;color:#666;">${sale.customerPhone||'—'}</td>
-        <td style="border:1px solid #ddd;padding:5px 7px;font-size:10px;text-align:right;">₹${sale.subtotal?.toFixed(2)}</td>
-        <td style="border:1px solid #ddd;padding:5px 7px;font-size:10px;text-align:right;color:#16a34a;">${sale.discount>0?'-₹'+sale.discount?.toFixed(2):'—'}</td>
-        <td style="border:1px solid #ddd;padding:5px 7px;font-size:10px;text-align:right;font-weight:700;">₹${sale.totalAmount?.toFixed(2)}</td>
-        <td style="border:1px solid #ddd;padding:5px 7px;font-size:10px;text-align:right;color:#166534;font-weight:700;">₹${paid.toFixed(2)}</td>
-        <td style="border:1px solid #ddd;padding:5px 7px;font-size:10px;text-align:right;color:${balance>0?'#b91c1c':'#166534'};font-weight:700;">${balance>0?`₹${balance.toFixed(2)}`:'✓'}</td>
-        <td style="border:1px solid #ddd;padding:5px 7px;font-size:10px;text-align:center;text-transform:capitalize;">${sale.paymentMethod}</td>
-        <td style="border:1px solid #ddd;padding:5px 7px;font-size:10px;text-align:center;">
-          <span style="padding:2px 7px;border-radius:12px;font-size:9px;font-weight:700;background:${sale.paymentStatus==='paid'?'#dcfce7':sale.paymentStatus==='pending'?'#fef9c3':'#fee2e2'};color:${sale.paymentStatus==='paid'?'#166534':sale.paymentStatus==='pending'?'#854d0e':'#991b1b'};">${isTamil?(TAMIL[sale.paymentStatus]||sale.paymentStatus):sale.paymentStatus}</span>
-        </td>
-      </tr>`;
+  const pages = chunkArray(sales, ITEMS_PER_PAGE);
+  const total = pages.length;
+  const date  = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  // Grand aggregates
+  const grandTotal    = sales.reduce((s, i) => s + (i.totalAmount || 0), 0);
+  const grandSubtotal = sales.reduce((s, i) => s + (i.subtotal || 0), 0);
+  const grandDisc     = sales.reduce((s, i) => s + (i.discount || 0), 0);
+  const grandPaid     = sales.reduce((s, i) => s + (i.amountPaid || (i.paymentStatus === 'paid' ? i.totalAmount : 0) || 0), 0);
+  const grandBalance  = Math.max(0, grandTotal - grandPaid);
+
+  const css = `
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:#fff;font-family:'Noto Sans Tamil','Segoe UI',Arial,sans-serif;color:#1a1a1a;}
+    @media print{@page{size:A4 landscape;margin:0;}body{margin:0;}}
+    .page{
+      width:297mm;min-height:210mm;background:#fff;
+      padding:7mm 8mm;box-sizing:border-box;
+      page-break-after:always;
+      display:flex;flex-direction:column;
+    }
+    .page:last-child{page-break-after:auto;}
+    /* header */
+    .hdr{display:flex;justify-content:space-between;align-items:flex-start;
+         border-bottom:3px solid ${BRAND};padding-bottom:8px;margin-bottom:10px;}
+    .shop-name{font-size:18px;font-weight:900;color:${BRAND};font-family:Georgia,serif;}
+    .shop-sub{font-size:8px;color:#888;text-transform:uppercase;letter-spacing:2px;margin-top:1px;}
+    .period-label{font-size:12px;font-weight:800;color:#1a1a1a;}
+    .period-meta{font-size:9px;color:#888;margin-top:2px;}
+    /* table */
+    .rt{width:100%;border-collapse:collapse;font-size:9.5px;}
+    .rt thead tr{background:${BRAND};}
+    .rt th{
+      padding:6px 5px;font-size:8.5px;font-weight:800;
+      text-transform:uppercase;color:#fff;
+      white-space:nowrap;text-align:left;
+    }
+    .rt th.r{text-align:right;}
+    .rt td{border:1px solid #e0e0e0;padding:5px 5px;vertical-align:middle;}
+    .rt td.r{text-align:right;}
+    .rt td.c{text-align:center;}
+    .rt tbody tr.even{background:#fdf8f3;}
+    .rt tbody tr.odd{background:#fff;}
+    /* tfoot totals row */
+    .rt tfoot tr{background:${BRAND};}
+    .rt tfoot td{
+      border:1px solid #b45309;padding:6px 5px;
+      font-size:10px;font-weight:900;color:#fff;
+    }
+    .rt tfoot td.r{text-align:right;}
+    /* summary cards */
+    .summary{
+      display:grid;grid-template-columns:repeat(4,1fr);
+      border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;
+      margin-top:10px;
+    }
+    .sum-card{padding:10px 12px;border-right:1px solid #e0e0e0;}
+    .sum-card:last-child{border-right:none;}
+    .sum-title{font-size:8px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;}
+    .sum-val{font-size:15px;font-weight:900;}
+    .footer-note{text-align:center;margin-top:8px;font-size:8.5px;color:#aaa;}
+    .continue-note{text-align:right;margin-top:auto;padding-top:6px;
+                   font-size:8.5px;color:#888;border-top:1px solid #ddd;}
+    .spacer{flex:1;}
+    /* status pills */
+    .pill{display:inline-block;padding:1px 6px;border-radius:10px;
+          font-size:8px;font-weight:700;}
+  `;
+
+  const headers = [
+    { label: L('Inv #', 'இல #'),       cls: '' },
+    { label: L('Date', TAMIL.date),     cls: '' },
+    { label: L('Customer', TAMIL.customer), cls: '' },
+    { label: L('Phone', TAMIL.phone),   cls: '' },
+    { label: L('Subtotal', TAMIL.subtotal), cls: 'r' },
+    { label: L('Discount', TAMIL.discount), cls: 'r' },
+    { label: L('Total', TAMIL.total),   cls: 'r' },
+    { label: L('Paid', TAMIL.paid),     cls: 'r' },
+    { label: L('Balance', TAMIL.balance), cls: 'r' },
+    { label: 'Method',                  cls: 'c' },
+    { label: 'Status',                  cls: 'c' },
+  ];
+
+  const headHTML = headers.map(h => `<th class="${h.cls}">${h.label}</th>`).join('');
+
+  const pageHTMLArr = pages.map((pageSales, pi) => {
+    const isLast    = pi === total - 1;
+    const emptyRows = Math.max(0, ITEMS_PER_PAGE - pageSales.length);
+    const startIdx  = pi * ITEMS_PER_PAGE;
+
+    const rowsHTML = pageSales.map((sale, i) => {
+      const paidAmt   = sale.amountPaid || (sale.paymentStatus === 'paid' ? sale.totalAmount : 0) || 0;
+      const balAmt    = Math.max(0, (sale.totalAmount || 0) - paidAmt);
+      // Always transliterate when Tamil mode; else show English
+      const custName  = isTamil
+        ? (sale.customerNameTamil || transliterateToTamil(sale.customerName))
+        : sale.customerName;
+      const rowCls    = (startIdx + i) % 2 === 0 ? 'odd' : 'even';
+      const stBg      = sale.paymentStatus === 'paid' ? '#dcfce7' : sale.paymentStatus === 'pending' ? '#fef9c3' : '#fee2e2';
+      const stCol     = sale.paymentStatus === 'paid' ? '#166534' : sale.paymentStatus === 'pending' ? '#854d0e' : '#991b1b';
+      const stLabel   = isTamil ? (TAMIL[sale.paymentStatus] || sale.paymentStatus) : sale.paymentStatus;
+
+      return `
+        <tr class="${rowCls}">
+          <td style="font-weight:700;color:${BRAND};">#${sale.invoiceNumber}</td>
+          <td style="white-space:nowrap;">${new Date(sale.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+          <td style="font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${custName}</td>
+          <td style="color:#555;">${sale.customerPhone || '—'}</td>
+          <td class="r">₹${(sale.subtotal || 0).toFixed(2)}</td>
+          <td class="r" style="color:#16a34a;">${(sale.discount || 0) > 0 ? '-₹' + (sale.discount).toFixed(2) : '—'}</td>
+          <td class="r" style="font-weight:700;">₹${(sale.totalAmount || 0).toFixed(2)}</td>
+          <td class="r" style="color:#166534;font-weight:700;">₹${paidAmt.toFixed(2)}</td>
+          <td class="r" style="color:${balAmt > 0 ? '#b91c1c' : '#166534'};font-weight:700;">
+            ${balAmt > 0 ? '₹' + balAmt.toFixed(2) : '✓'}
+          </td>
+          <td class="c" style="text-transform:capitalize;">${sale.paymentMethod}</td>
+          <td class="c">
+            <span class="pill" style="background:${stBg};color:${stCol};">${stLabel}</span>
+          </td>
+        </tr>`;
     }).join('');
-    const emptyRowsHTML=Array(emptyRows).fill(`<tr>${Array(11).fill('<td style="border:1px solid #eee;padding:5px 7px;">&nbsp;</td>').join('')}</tr>`).join('');
-    const footer=isLast?`
-      <tfoot>
-        <tr style="background:#d4831e;">
-          <td colspan="3" style="border:1px solid #b45309;padding:7px 8px;font-size:11px;font-weight:800;color:white;">${L('TOTAL','மொத்தம்')} (${sales.length})</td>
-          <td style="border:1px solid #b45309;padding:7px 8px;font-size:10px;font-weight:800;text-align:right;color:white;">₹${grandSubtotal.toFixed(2)}</td>
-          <td style="border:1px solid #b45309;padding:7px 8px;font-size:10px;font-weight:800;text-align:right;color:#bbf7d0;">-₹${grandDisc.toFixed(2)}</td>
-          <td style="border:1px solid #b45309;padding:7px 8px;font-size:12px;font-weight:900;text-align:right;color:white;">₹${grandTotal.toFixed(2)}</td>
-          <td style="border:1px solid #b45309;padding:7px 8px;font-size:11px;font-weight:800;text-align:right;color:#bbf7d0;">₹${grandPaid.toFixed(2)}</td>
-          <td style="border:1px solid #b45309;padding:7px 8px;font-size:11px;font-weight:800;text-align:right;color:#fecaca;">₹${grandBalance.toFixed(2)}</td>
-          <td colspan="3" style="border:1px solid #b45309;padding:7px 8px;"></td>
-        </tr>
-      </tfoot>
-      <div style="margin-top:16px;display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #ddd;border-radius:8px;overflow:hidden;">
-        ${[[L('Total Invoices','மொத்த விலைப்பட்டியல்'),sales.length,'#1a1a1a'],[L('Grand Total',TAMIL.grandTotal),'₹'+grandTotal.toFixed(2),'#d4831e'],[L('Total Paid',TAMIL.paid),'₹'+grandPaid.toFixed(2),'#166534'],[L('Total Balance',TAMIL.balance),'₹'+grandBalance.toFixed(2),'#b91c1c']].map(([l,v,c],i)=>`
-        <div style="padding:12px 14px;border-right:${i<3?'1px solid #ddd':'none'};background:${i===3&&grandBalance>0?'#fef2f2':'#fff'};">
-          <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">${l}</div>
-          <div style="font-size:16px;font-weight:900;color:${c};">${v}</div>
-        </div>`).join('')}
-      </div>
-      <div style="text-align:center;margin-top:16px;font-size:10px;color:#999;">${L('Computer Generated Sales Report — Saka Rice Shop','கணினி உருவாக்கிய விற்பனை அறிக்கை — சாக்கா அரிசி கடை')}</div>`
-      :`<tfoot><tr><td colspan="11" style="border-top:2px solid #ddd;padding:7px 8px;font-size:10px;color:#888;text-align:right;">${L('Continued...',TAMIL.continued)} ${L('Page',TAMIL.page)} ${pi+1}/${total}</td></tr></tfoot>`;
 
-    return `
-      <div style="width:210mm;min-height:297mm;background:#fff;font-family:'Noto Sans Tamil','Segoe UI',Arial,sans-serif;color:#1a1a1a;padding:10mm;box-sizing:border-box;page-break-after:${isLast?'auto':'always'};">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:3px solid #d4831e;margin-bottom:16px;">
-          <div>
-            <div style="font-size:22px;font-weight:900;color:#d4831e;font-family:Georgia,serif;">🌾 ${isTamil?'சாக்கா அரிசி கடை':'Saka Rice Shop'}</div>
-            <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:2px;margin-top:2px;">${L('Sales History Report',TAMIL.salesReport)}</div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:2px;">${L('Period',TAMIL.period)}</div>
-            <div style="font-size:14px;font-weight:800;margin-top:2px;">${periodLabel}</div>
-            <div style="font-size:11px;color:#888;margin-top:3px;">${L('Generated',TAMIL.generated)}: ${date} | ${L('Page',TAMIL.page)} ${pi+1}/${total}</div>
+    const emptyHTML = Array(emptyRows).fill(0).map(() =>
+      `<tr class="odd">${Array(11).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
+    ).join('');
+
+    // Grand total tfoot — only on last page, inside the table
+    const tfootHTML = isLast ? `
+      <tfoot>
+        <tr>
+          <td colspan="3" style="font-size:10px;">
+            ${L('TOTAL', 'மொத்தம்')} — ${sales.length} ${L('invoices', TAMIL.invoices)}
+          </td>
+          <td></td>
+          <td class="r">₹${grandSubtotal.toFixed(2)}</td>
+          <td class="r" style="color:#bbf7d0;">-₹${grandDisc.toFixed(2)}</td>
+          <td class="r" style="font-size:11px;">₹${grandTotal.toFixed(2)}</td>
+          <td class="r" style="color:#bbf7d0;">₹${grandPaid.toFixed(2)}</td>
+          <td class="r" style="color:#fecaca;">₹${grandBalance.toFixed(2)}</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>` : '';
+
+    // Summary cards — only on last page, below the table
+    const summaryHTML = isLast ? `
+      <div class="summary">
+        <div class="sum-card">
+          <div class="sum-title">${L('Total Invoices', 'மொத்த விலைப்பட்டியல்')}</div>
+          <div class="sum-val" style="color:#1a1a1a;">${sales.length}</div>
+        </div>
+        <div class="sum-card">
+          <div class="sum-title">${L('Grand Total', TAMIL.grandTotal)}</div>
+          <div class="sum-val" style="color:${BRAND};">₹${grandTotal.toFixed(2)}</div>
+        </div>
+        <div class="sum-card">
+          <div class="sum-title">${L('Total Paid', TAMIL.paid)}</div>
+          <div class="sum-val" style="color:#166534;">₹${grandPaid.toFixed(2)}</div>
+        </div>
+        <div class="sum-card" style="${grandBalance > 0 ? 'background:#fef2f2;' : ''}">
+          <div class="sum-title">${L('Total Balance', TAMIL.balance)}</div>
+          <div class="sum-val" style="color:${grandBalance > 0 ? '#b91c1c' : '#166534'};">
+            ₹${grandBalance.toFixed(2)}
           </div>
         </div>
-        <table style="width:100%;border-collapse:collapse;">
-          <thead><tr style="background:#d4831e;">
-            ${[L('Inv #','இல #'),L('Date',TAMIL.date),L('Customer',TAMIL.customer),L('Phone',TAMIL.phone),L('Subtotal',TAMIL.subtotal),L('Discount',TAMIL.discount),L('Total',TAMIL.total),L('Paid',TAMIL.paid),L('Balance',TAMIL.balance),'Method','Status'].map(h=>`
-            <th style="padding:7px 6px;font-size:9px;font-weight:800;text-transform:uppercase;color:white;text-align:left;">${h}</th>`).join('')}
-          </tr></thead>
-          <tbody>${rows}${emptyRowsHTML}</tbody>
-          ${footer}
-        </table>
+      </div>
+      <div class="footer-note">
+        ${L('Computer Generated Sales Report — Saka Rice Shop', 'கணினி மூலம் உருவாக்கப்பட்ட விற்பனை அறிக்கை — சாக்கா அரிசி கடை')}
+      </div>` : `<div class="continue-note">
+        ${L('Continued on next page...', TAMIL.continued)} &nbsp;
+        ${L('Page', TAMIL.page)} ${pi + 1} / ${total}
       </div>`;
-  }).join('');
 
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${L('Sales Report','விற்பனை அறிக்கை')} — Saka Rice Shop</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;font-family:'Noto Sans Tamil','Segoe UI',Arial,sans-serif;}
-    @media print{@page{size:A4 landscape;margin:0;}body{margin:0;}}</style>
-  </head><body>${pageHTML}</body></html>`;
+    return `
+      <div class="page">
+        <!-- HEADER -->
+        <div class="hdr">
+          <div>
+            <div class="shop-name">🌾 ${isTamil ? 'சாக்கா அரிசி கடை' : 'Saka Rice Shop'}</div>
+            <div class="shop-sub">${L('Sales History Report', TAMIL.salesReport)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:8.5px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1.5px;">
+              ${L('Period', TAMIL.period)}
+            </div>
+            <div class="period-label">${periodLabel}</div>
+            <div class="period-meta">
+              ${L('Generated', TAMIL.generated)}: ${date} &nbsp;|&nbsp;
+              ${L('Page', TAMIL.page)} ${pi + 1} / ${total}
+            </div>
+          </div>
+        </div>
+
+        <!-- TABLE -->
+        <table class="rt">
+          <thead><tr>${headHTML}</tr></thead>
+          <tbody>${rowsHTML}${emptyHTML}</tbody>
+          ${tfootHTML}
+        </table>
+
+        <div class="spacer"></div>
+
+        ${summaryHTML}
+      </div>`;
+  });
+
+  return `<!DOCTYPE html>
+<html lang="${isTamil ? 'ta' : 'en'}">
+<head>
+  <meta charset="UTF-8">
+  <title>${L('Sales Report', 'விற்பனை அறிக்கை')} — Saka Rice Shop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>${css}</style>
+</head>
+<body>${pageHTMLArr.join('')}</body>
+</html>`;
 }
 
 function exportToCSV(sales, periodLabel) {
