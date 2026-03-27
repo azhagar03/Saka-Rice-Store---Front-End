@@ -166,7 +166,7 @@ const TAMIL = {
   status:'நிலை', method:'முறை', by:'செய்தவர்', page:'பக்கம்',
   continued:'அடுத்த பக்கத்தில் தொடர்கிறது',
   customerSeal:'வாங்குபவரின் முத்திரை & கையொப்பம்',
-  forShop:'சாக்கா அரிசி கடைக்காக',
+  forShop:'சாகா அரிசி கடைக்காக',
   computerGenerated:'கணினி மூலம் உருவாக்கப்பட்ட விலைப்பட்டியல்',
   total:'மொத்தம்', invoices:'விலைப்பட்டியல்கள்', salesReport:'விற்பனை அறிக்கை',
   period:'காலகட்டம்', generated:'உருவாக்கப்பட்ட தேதி', customer:'வாடிக்கையாளர்',
@@ -350,7 +350,7 @@ function generateInvoiceHTML(sale, lang = 'english') {
         <!-- HEADER -->
         <div class="hdr">
           <div>
-            <div class="shop-name">🌾 ${isTamil ? 'சாக்கா அரிசி கடை' : 'Saka Rice Shop'}</div>
+            <div class="shop-name">🌾 ${isTamil ? 'சாகா அரிசி கடை' : 'Saka Rice Shop'}</div>
             <div class="shop-sub">${isTamil ? 'உயர்தர அரிசி வியாபாரிகள்' : 'Premium Rice Traders & Wholesalers'}</div>
             <div class="shop-info">GSTIN: 33XXXXX0000X1ZX &nbsp;|&nbsp; +91 99999 99999</div>
           </div>
@@ -600,7 +600,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
         </div>
       </div>
       <div class="footer-note">
-        ${L('Computer Generated Sales Report — Saka Rice Shop', 'கணினி மூலம் உருவாக்கப்பட்ட விற்பனை அறிக்கை — சாக்கா அரிசி கடை')}
+        ${L('Computer Generated Sales Report — Saka Rice Shop', 'கணினி மூலம் உருவாக்கப்பட்ட விற்பனை அறிக்கை — சாகா அரிசி கடை')}
       </div>` : `<div class="continue-note">
         ${L('Continued on next page...', TAMIL.continued)} &nbsp;
         ${L('Page', TAMIL.page)} ${pi + 1} / ${total}
@@ -611,7 +611,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
         <!-- HEADER -->
         <div class="hdr">
           <div>
-            <div class="shop-name">🌾 ${isTamil ? 'சாக்கா அரிசி கடை' : 'Saka Rice Shop'}</div>
+            <div class="shop-name">🌾 ${isTamil ? 'சாகா அரிசி கடை' : 'Saka Rice Shop'}</div>
             <div class="shop-sub">${L('Sales History Report', TAMIL.salesReport)}</div>
           </div>
           <div style="text-align:right;">

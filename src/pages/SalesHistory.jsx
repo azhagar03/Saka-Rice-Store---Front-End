@@ -161,7 +161,7 @@ const TAMIL = {
   status:'நிலை', method:'முறை', by:'செய்தவர்', page:'பக்கம்',
   continued:'அடுத்த பக்கத்தில் தொடர்கிறது',
   customerSeal:'வாங்குபவரின் முத்திரை & கையொப்பம்',
-  forShop:'சாக்கா அரிசி கடைக்காக',
+  forShop:'சாகா அரிசி கடைக்காக',
   computerGenerated:'கணினி மூலம் உருவாக்கப்பட்ட விலைப்பட்டியல்',
   total:'மொத்தம்', invoices:'விலைப்பட்டியல்கள்', salesReport:'விற்பனை அறிக்கை',
   period:'காலகட்டம்', generated:'உருவாக்கப்பட்ட தேதி', customer:'வாடிக்கையாளர்',
@@ -345,7 +345,7 @@ function generateInvoiceHTML(sale, lang = 'english') {
         <!-- HEADER -->
         <div class="hdr">
           <div>
-            <div class="shop-name">🌾 ${isTamil ? 'சாக்கா அரிசி கடை' : 'Saka Rice Shop'}</div>
+            <div class="shop-name">🌾 ${isTamil ? 'சாகா அரிசி கடை' : 'Saka Rice Shop'}</div>
             <div class="shop-sub">${isTamil ? 'உயர்தர அரிசி வியாபாரிகள்' : 'Premium Rice Traders & Wholesalers'}</div>
             <div class="shop-info">GSTIN: 33XXXXX0000X1ZX &nbsp;|&nbsp; +91 99999 99999</div>
           </div>
@@ -595,7 +595,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
         </div>
       </div>
       <div class="footer-note">
-        ${L('Computer Generated Sales Report — Saka Rice Shop', 'கணினி மூலம் உருவாக்கப்பட்ட விற்பனை அறிக்கை — சாக்கா அரிசி கடை')}
+        ${L('Computer Generated Sales Report — Saka Rice Shop', 'கணினி மூலம் உருவாக்கப்பட்ட விற்பனை அறிக்கை — சாகா அரிசி கடை')}
       </div>` : `<div class="continue-note">
         ${L('Continued on next page...', TAMIL.continued)} &nbsp;
         ${L('Page', TAMIL.page)} ${pi + 1} / ${total}
@@ -606,7 +606,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
         <!-- HEADER -->
         <div class="hdr">
           <div>
-            <div class="shop-name">🌾 ${isTamil ? 'சாக்கா அரிசி கடை' : 'Saka Rice Shop'}</div>
+            <div class="shop-name">🌾 ${isTamil ? 'சாகா அரிசி கடை' : 'Saka Rice Shop'}</div>
             <div class="shop-sub">${L('Sales History Report', TAMIL.salesReport)}</div>
           </div>
           <div style="text-align:right;">
@@ -681,6 +681,24 @@ function InvoicePrint({ sale, onClose }) {
   const paid    = sale.amountPaid||(sale.paymentStatus==='paid'?sale.totalAmount:0)||0;
   const balance = Math.max(0,(sale.totalAmount||0)-paid);
 
+  const handlePrint = () => {
+    const html = generateInvoiceHTML(sale, printLang);
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) { alert('Please allow popups for this site to print.'); return; }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.onload = () => {
+      win.focus();
+      win.print();
+      win.onafterprint = () => win.close();
+    };
+    // fallback if onload doesn't fire
+    setTimeout(() => {
+      try { win.focus(); win.print(); win.onafterprint = () => win.close(); } catch(e) {}
+    }, 800);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="card w-full max-w-lg shadow-2xl">
@@ -695,7 +713,10 @@ function InvoicePrint({ sale, onClose }) {
                 </button>
               ))}
             </div>
-            <button onClick={()=>openPrint(generateInvoiceHTML(sale,printLang))} className="bg-white text-brand-600 font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs hover:bg-brand-50"><Printer className="w-3.5 h-3.5"/> Print</button>
+            <button onClick={handlePrint}
+              className="bg-white text-brand-600 font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs hover:bg-brand-50">
+              <Printer className="w-3.5 h-3.5"/> Print
+            </button>
             <button onClick={onClose} className="p-2 text-white/70 hover:text-white hover:bg-white/20 rounded-xl"><X className="w-5 h-5"/></button>
           </div>
         </div>
@@ -742,7 +763,6 @@ function InvoicePrint({ sale, onClose }) {
     </div>
   );
 }
-
 // ══════════════════════════════════════════════════════════════════════════════
 // Main SalesHistory
 // ══════════════════════════════════════════════════════════════════════════════
@@ -782,15 +802,68 @@ export default function SalesHistory() {
   const handleSearch=e=>{e.preventDefault();setPage(1);load();};
   const fetchAll=async()=>{const r=await getSales(buildParams({page:1,limit:9999}));return r.data.data;};
   const handleExportCSV=async()=>{const all=await fetchAll();exportToCSV(all,periodLabel);toast.success('CSV exported!');};
-  const handlePrintReport=async()=>{const all=await fetchAll();openPrint(generateReportHTML(all,periodLabel,printLang));};
-  const handleView=async id=>{try{const res=await getSaleById(id);setViewSale(res.data.data);}catch{toast.error('Failed to load invoice');}};
 
+// ── Print helper — module-level so both components can use it ────────────────
+function openPrint(html) {
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  setTimeout(() => {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch (err) {
+      console.error('Print failed:', err);
+    }
+    setTimeout(() => document.body.removeChild(iframe), 1000);
+  }, 700);
+}
+
+const handlePrint = () => {
+  const html = generateInvoiceHTML(sale, printLang);
+  const win = window.open('', '_blank', 'width=900,height=700');
+  if (!win) { alert('Please allow popups for this site to print.'); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.onload = () => {
+    win.focus();
+    win.print();
+    win.onafterprint = () => win.close();
+  };
+  setTimeout(() => {
+    try { win.focus(); win.print(); win.onafterprint = () => win.close(); } catch(e) {}
+  }, 800);
+};
+
+  const handleView = async id => {
+    try { const res = await getSaleById(id); setViewSale(res.data.data); }
+    catch { toast.error('Failed to load invoice'); }
+  };
   // Aggregate totals from current page
   const totalAmt     = sales.reduce((s,i)=>s+(i.totalAmount||0),0);
   const totalPaid    = sales.reduce((s,i)=>s+(i.amountPaid||(i.paymentStatus==='paid'?i.totalAmount:0)||0),0);
   const totalBalance = sales.reduce((s,i)=>s+Math.max(0,(i.totalAmount||0)-(i.amountPaid||(i.paymentStatus==='paid'?i.totalAmount:0)||0)),0);
 
   const statusIcon=s=>s==='paid'?<CheckCircle className="w-3 h-3"/>:s==='pending'?<Clock className="w-3 h-3"/>:<AlertCircle className="w-3 h-3"/>;
+
+  const handlePrintReport = async () => {
+  const all = await fetchAll();
+  const html = generateReportHTML(all, periodLabel, printLang);
+  const win = window.open('', '_blank', 'width=1200,height=800');
+  if (!win) { alert('Please allow popups for this site to print.'); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); win.onafterprint = () => win.close(); };
+  setTimeout(() => {
+    try { win.focus(); win.print(); win.onafterprint = () => win.close(); } catch(e) {}
+  }, 800);
+};
 
   return (
     <div className="space-y-6">
