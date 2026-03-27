@@ -14,9 +14,11 @@ export const updateStock = (id, addStock) => API.patch(`/rice/${id}/stock`, { ad
 export const deleteRice = (id) => API.delete(`/rice/${id}`);
 
 // Sales APIs
-export const getSales = (params) => API.get('/sales', { params });
-export const getSaleById = (id) => API.get(`/sales/${id}`);
-export const createSale = (data) => API.post('/sales', data);
 
+export const getSales    = (params) => API.get('/sales', { params });
+export const getSaleById = (id)     => API.get(`/sales/${id}`);
+export const createSale  = (data)   => API.post('/sales', data);
+export const updateSale  = (id, data) => API.put(`/sales/${id}`, data);   // ADD
+export const deleteSale  = (id)     => API.delete(`/sales/${id}`);        // ADD
 // Dashboard APIs
 export const getDashboardStats = (filter) => API.get('/dashboard/stats', { params: { filter } });
