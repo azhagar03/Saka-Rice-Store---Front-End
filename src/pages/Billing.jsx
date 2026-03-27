@@ -813,7 +813,8 @@ function EditSaleModal({ sale, riceItems, onClose, onSaved }) {
   const gstAmount     = afterDiscount*gstRate/100;
   const grandTotal    = afterDiscount+gstAmount;
   const paidAmt       = Number(amountPaid)||0;
-  const balanceAmt    = Math.max(0,grandTotal-paidAmt);
+  const totalWithOldPending = grandTotal + selectedCustomerPending;
+const balanceAmt = Math.max(0, totalWithOldPending - amountPaid);
 
   // Auto-set amountPaid when status = paid
   useEffect(()=>{ if(paymentStatus==='paid') setAmountPaid(grandTotal.toFixed(2)); },[paymentStatus,grandTotal]);
@@ -985,11 +986,21 @@ function NewBillForm({ riceItems, onSuccess }) {
       )
     : savedCustomers;
 
+    const [selectedCustomerPending, setSelectedCustomerPending] = useState(0);
+
   const selectCustomer = c => {
-    setCustomer({ name: c.name, nameTamil: '', phone: c.phone || '', address: c.address || '', city: c.city || '', addressTamil: '' });
-    setCustSearch('');
+  setCustomer({
+    name: c.name,
+    phone: c.phone || '',
+    address: c.address || ''
+  });
+      setCustSearch('');
     setShowDropdown(false);
+      setSelectedCustomerPending(c.pendingAmount || 0);
+    
   };
+
+  
 
   const addItem    = () => setItems(p=>[...p,{rice:'',quantity:'',itemDiscount:0}]);
   const removeItem = i  => setItems(p=>p.filter((_,idx)=>idx!==i));
@@ -1054,6 +1065,7 @@ function NewBillForm({ riceItems, onSuccess }) {
               onFocus={()=>setShowDropdown(true)}
             />
           </div>
+ 
           {showDropdown && filteredCustomers.length > 0 && (
             <div className="absolute z-40 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-56 overflow-y-auto">
               {filteredCustomers.map(c => {
@@ -1085,30 +1097,28 @@ function NewBillForm({ riceItems, onSuccess }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><label className="label">Customer Name (English) *</label>
+          <div><label className="label">Customer Name</label>
             <div className="relative"><User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
               <input className="input-field pl-9" placeholder="Full name" value={customer.name} onChange={e=>setCustomer(c=>({...c,name:e.target.value}))} required/>
-            </div></div>
-          <div><label className="label">Customer Name (Tamil)</label>
-            <div className="relative"><Languages className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-              <input className="input-field pl-9" placeholder="தமிழ் பெயர்" value={customer.nameTamil} onChange={e=>setCustomer(c=>({...c,nameTamil:e.target.value}))}/>
-            </div></div>
+                       {selectedCustomerPending > 0 && (
+  <div className="mt-2 text-sm font-bold text-red-600">
+    Previous Pending: ₹{selectedCustomerPending.toFixed(2)}
+  </div>
+)}
+            </div>
+            
+            </div>
+     
           <div><label className="label">Phone Number</label>
             <div className="relative"><Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
               <input className="input-field pl-9" placeholder="Mobile number" value={customer.phone} onChange={e=>setCustomer(c=>({...c,phone:e.target.value}))}/>
             </div></div>
-          <div><label className="label">City</label>
-            <div className="relative"><MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-              <input className="input-field pl-9" placeholder="City / நகரம்" value={customer.city} onChange={e=>setCustomer(c=>({...c,city:e.target.value}))}/>
-            </div></div>
-          <div><label className="label">Address (English)</label>
+        
+          <div><label className="label">Address</label>
             <div className="relative"><MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
               <input className="input-field pl-9" placeholder="Customer address" value={customer.address} onChange={e=>setCustomer(c=>({...c,address:e.target.value}))}/>
             </div></div>
-          <div><label className="label">Address (Tamil)</label>
-            <div className="relative"><MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-              <input className="input-field pl-9" placeholder="முகவரி தமிழில்" value={customer.addressTamil} onChange={e=>setCustomer(c=>({...c,addressTamil:e.target.value}))}/>
-            </div></div>
+      
         </div>
       </div>
 
