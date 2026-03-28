@@ -14,37 +14,59 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved }) {
   const [form, setForm] = useState(
     isEdit
       ? {
-          name:                    customer.name,
-          phone:                   customer.phone    || '',
-          address:                 customer.address  || '',
-          notes:                   customer.notes    || '',
-          // Manual adjustment stored on customer document
+          name: customer.name,
+          phone: customer.phone || '',
+          address: customer.address || '',
+          notes: customer.notes || '',
           manualPendingAdjustment: customer.manualPendingAdjustment ?? 0,
-          manualPendingNote:       customer.manualPendingNote || '',
+          manualPendingNote: customer.manualPendingNote || '',
         }
       : {
-          name: '', phone: '', address: '', notes: '',
+          name: '',
+          phone: '',
+          address: '',
+          notes: '',
           manualPendingAdjustment: 0,
           manualPendingNote: '',
         }
   );
+
   const [saving, setSaving] = useState(false);
+  const [adjustType, setAdjustType] = useState('reduce'); // default to "Received"
+  const [inputAmount, setInputAmount] = useState(''); // ✅ separate input state
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  // Effective pending = auto-calculated from sales + manual adjustment
-  const effectivePending = Math.max(0, existingPending + Number(form.manualPendingAdjustment || 0));
+  // ✅ Current effective pending (sales + stored manual adj)
+  const currentEffective = Math.max(0, existingPending + (customer?.manualPendingAdjustment ?? 0));
+
+  // ✅ Preview what pending will become after this entry
+  const amt = Number(inputAmount || 0);
+  const previewPending = adjustType === 'reduce'
+    ? Math.max(0, currentEffective - amt)
+    : currentEffective + amt;
 
   const handleSubmit = async e => {
     e?.preventDefault();
     if (!form.name.trim()) return toast.error('Customer name is required');
+
+    // ✅ Compute the new manualPendingAdjustment to send to backend
+    const newEffective = adjustType === 'reduce'
+      ? Math.max(0, currentEffective - amt)
+      : currentEffective + amt;
+
+    // manualPendingAdjustment = newEffective - existingPending (sales)
+    const newManualAdj = newEffective - existingPending;
+
+    const payload = { ...form, manualPendingAdjustment: newManualAdj };
+
     setSaving(true);
     try {
       if (isEdit) {
-        await updateCustomer(customer._id, form);
+        await updateCustomer(customer._id, payload);
         toast.success('Customer updated!');
       } else {
-        await createCustomer(form);
+        await createCustomer(payload);
         toast.success('Customer added!');
       }
       onSaved();
@@ -58,147 +80,99 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-gray-200 flex flex-col">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border flex flex-col">
 
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-gray-200 bg-brand-500 rounded-t-2xl">
-          <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
-            <User className="w-5 h-5" /> {isEdit ? 'Edit Customer' : 'Add Customer'}
+        <div className="flex justify-between p-5 bg-brand-500 rounded-t-2xl">
+          <h2 className="text-white font-bold">
+            {isEdit ? 'Edit Customer' : 'Add Customer'}
           </h2>
-          <button onClick={onClose} className="p-2 text-white/70 hover:text-white hover:bg-white/20 rounded-xl">
-            <X className="w-5 h-5" />
-          </button>
+          <button onClick={onClose}><X className="text-white" /></button>
         </div>
 
-        <div className="p-5 space-y-4 overflow-y-auto max-h-[80vh]">
+        <div className="p-5 space-y-4">
 
           {/* Name */}
-          <div>
-            <label className="label">Customer Name * <span className="text-gray-400 font-normal text-xs">(English / தமிழ்)</span></label>
-            <div className="relative">
-              <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                className="input-field pl-9"
-                placeholder="Name — பெயர்"
-                required
-                value={form.name}
-                onChange={e => set('name', e.target.value)} />
+          <input
+            className="input-field"
+            placeholder="Customer Name"
+            value={form.name}
+            onChange={e => set('name', e.target.value)}
+          />
+             <input
+            className="input-field"
+            placeholder="Contact Number"
+            value={form.phone}
+            onChange={e => set('phone', e.target.value)}
+          />
+   <input
+            className="input-field"
+            placeholder="Address"
+            value={form.address}
+            onChange={e => set('address', e.target.value)}
+          />
+
+
+          {/* ✅ Show current balance clearly */}
+          {isEdit && (
+            <div className="p-3 rounded bg-amber-50 border border-amber-200">
+              <p className="text-sm text-amber-700 font-semibold">
+                Current Balance: ₹{currentEffective.toFixed(2)}
+              </p>
             </div>
+          )}
+
+          {/* Toggle */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setAdjustType('add'); setInputAmount(''); }}
+              className={`px-3 py-1 rounded ${
+                adjustType === 'add' ? 'bg-green-600 text-white' : 'bg-gray-200'
+              }`}
+            >
+              + Add
+            </button>
+            <button
+              onClick={() => { setAdjustType('reduce'); setInputAmount(''); }}
+              className={`px-3 py-1 rounded ${
+                adjustType === 'reduce' ? 'bg-red-600 text-white' : 'bg-gray-200'
+              }`}
+            >
+              − Received
+            </button>
           </div>
 
-          {/* Phone */}
-          <div>
-            <label className="label">Mobile Number</label>
-            <div className="relative">
-              <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                className="input-field pl-9"
-                placeholder="Mobile number"
-                type="tel"
-                value={form.phone}
-                onChange={e => set('phone', e.target.value)} />
-            </div>
-          </div>
+          {/* ✅ Clean input — just the amount entered now */}
+          <input
+            type="number"
+            className="input-field"
+            placeholder={adjustType === 'reduce' ? 'Amount received' : 'Amount to add'}
+            value={inputAmount}
+            onChange={e => setInputAmount(e.target.value)}
+            min={0}
+          />
 
-          {/* Address */}
-          <div>
-            <label className="label">Address / முகவரி <span className="text-gray-400 font-normal text-xs">(English / தமிழ்)</span></label>
-            <textarea
-              className="input-field resize-none"
-              rows={2}
-              placeholder="Address — முகவரி"
-              value={form.address}
-              onChange={e => set('address', e.target.value)} />
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="label">Notes <span className="text-gray-400 font-normal text-xs">(optional)</span></label>
-            <input
-              className="input-field"
-              placeholder="Any notes..."
-              value={form.notes}
-              onChange={e => set('notes', e.target.value)} />
-          </div>
-
-          {/* ── Balance Adjustment Section ───────────────────────────────── */}
-          <div className="border-t border-dashed border-gray-300 pt-4">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-              <Wallet className="w-3.5 h-3.5" /> Balance / Pending Adjustment
+          {/* ✅ Live preview */}
+          <div className="p-3 rounded bg-gray-100">
+            <p className="text-sm text-gray-500">
+              {adjustType === 'reduce'
+                ? `₹${currentEffective.toFixed(2)} − ₹${amt.toFixed(2)} received`
+                : `₹${currentEffective.toFixed(2)} + ₹${amt.toFixed(2)} added`}
             </p>
-
-            {/* Show auto-calculated pending from sales (read-only context) */}
-            {isEdit && (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mb-3 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 font-semibold">Auto-calculated from Sales</p>
-                  <p className="text-sm font-bold text-gray-800 font-mono">₹{existingPending.toFixed(2)}</p>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-gray-400">
-                  <Info className="w-3 h-3" /> calculated from invoice history
-                </div>
-              </div>
-            )}
-
-            {/* Manual adjustment — positive adds to pending, negative reduces */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">
-                  Balance Adjustment (₹)
-                  <span className="text-gray-400 font-normal ml-1 text-xs">+ adds · − reduces</span>
-                </label>
-                <div className="relative">
-                  <IndianRupee className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="input-field pl-9"
-                    placeholder="0.00"
-                    value={form.manualPendingAdjustment}
-                    onChange={e => set('manualPendingAdjustment', e.target.value)}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="label">Reason / Note</label>
-                <input
-                  className="input-field"
-                  placeholder="e.g. Opening balance, Correction…"
-                  value={form.manualPendingNote}
-                  onChange={e => set('manualPendingNote', e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Live preview of effective pending */}
-            <div className={`mt-3 rounded-xl px-4 py-3 flex items-center justify-between
-              ${effectivePending > 0
-                ? 'bg-red-50 border border-red-200'
-                : 'bg-green-50 border border-green-200'}`}>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide opacity-70">
-                  {effectivePending > 0 ? '⚠ Effective Pending (will show in Billing)' : '✓ No Pending Balance'}
-                </p>
-                <p className={`text-xl font-bold font-mono mt-0.5
-                  ${effectivePending > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                  ₹{effectivePending.toFixed(2)}
-                </p>
-              </div>
-              {Number(form.manualPendingAdjustment) !== 0 && (
-                <div className="text-xs text-right opacity-60">
-                  <p>Sales: ₹{existingPending.toFixed(2)}</p>
-                  <p>Adj: {Number(form.manualPendingAdjustment) >= 0 ? '+' : ''}₹{Number(form.manualPendingAdjustment).toFixed(2)}</p>
-                </div>
-              )}
-            </div>
+            <p className="font-bold text-lg">
+              New Balance: ₹{previewPending.toFixed(2)}
+            </p>
           </div>
-        </div>
 
-        {/* Footer */}
-        <div className="px-5 pb-5 pt-2 flex gap-3 justify-end border-t border-gray-100">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-          <button onClick={handleSubmit} disabled={saving} className="btn-primary px-6">
-            {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Customer'}
+          <input
+            className="input-field"
+            placeholder="Note (optional)"
+            value={form.manualPendingNote}
+            onChange={e => set('manualPendingNote', e.target.value)}
+          />
+
+          <button onClick={handleSubmit} disabled={saving} className="btn-primary w-full">
+            {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>
