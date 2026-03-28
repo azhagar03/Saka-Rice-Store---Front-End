@@ -20,18 +20,8 @@ const PERIODS = [
   { label: 'Custom',     value: 'custom' },
 ];
 
-// ── Tamil label maps ──────────────────────────────────────────────────────────
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// PASTE THIS ENTIRE BLOCK into your Billing.jsx / SalesHistory.jsx,
-// replacing the existing generateInvoiceHTML, generateReportHTML,
-// chunkArray, and transliteration helpers.
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 // ── English → Tamil transliteration map ──────────────────────────────────────
-// Covers common consonant+vowel combos used in South-Indian names.
-// Add more pairs here if needed.
 const EN_TO_TAMIL_MAP = [
-  // Longer patterns first (greedy match)
   ['thi','தி'],['tha','த'],['tho','தோ'],['thu','து'],['thee','தீ'],['the','தே'],
   ['dha','த'],['dhi','தி'],['dhu','து'],
   ['sha','ஷா'],['shi','ஷி'],['shu','ஷு'],['sh','ஷ'],
@@ -74,13 +64,8 @@ const EN_TO_TAMIL_MAP = [
   ['x','க்ஸ்'],['q','க்'],
 ];
 
-/**
- * Transliterate an English name to approximate Tamil script.
- * Used when customerNameTamil is not stored.
- */
 function transliterateToTamil(name) {
   if (!name) return '';
-  // Preserve spaces — transliterate word by word
   return name.split(' ').map(word => {
     let result = '';
     let remaining = word.toLowerCase();
@@ -95,7 +80,6 @@ function transliterateToTamil(name) {
         }
       }
       if (!matched) {
-        // Pass through digits/symbols unchanged
         result += remaining[0];
         remaining = remaining.slice(1);
       }
@@ -104,7 +88,6 @@ function transliterateToTamil(name) {
   }).join(' ');
 }
 
-// ── Chunk array into pages ────────────────────────────────────────────────────
 const chunkArray = (arr, size) => {
   const pages = [];
   for (let i = 0; i < arr.length; i += size) pages.push(arr.slice(i, i + size));
@@ -112,7 +95,6 @@ const chunkArray = (arr, size) => {
   return pages;
 };
 
-// ── Number-to-words (English) ─────────────────────────────────────────────────
 const ones  = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
 const tensW = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
 function numToWords(n) {
@@ -134,7 +116,6 @@ function amountWords(amt) {
   return w + ' Only';
 }
 
-// ── Tamil number-to-words ─────────────────────────────────────────────────────
 const tOnes = ['','ஒன்று','இரண்டு','மூன்று','நான்கு','ஐந்து','ஆறு','ஏழு','எட்டு','ஒன்பது','பத்து','பதினொன்று','பன்னிரண்டு','பதின்மூன்று','பதினான்கு','பதினைந்து','பதினாறு','பதினேழு','பதினெட்டு','பத்தொன்பது'];
 const tTens = ['','','இருபது','முப்பது','நாற்பது','ஐம்பது','அறுபது','எழுபது','எண்பது','தொண்ணூறு'];
 function numToWordsTamil(n) {
@@ -155,7 +136,6 @@ function amountWordsTamil(amt) {
   return w + ' மட்டும்';
 }
 
-// ── Tamil label map ───────────────────────────────────────────────────────────
 const TAMIL = {
   taxInvoice:'வரி விலைப்பட்டியல்', billTo:'வாங்குபவர்', paymentDetails:'கட்டண விவரங்கள்',
   riceItem:'அரிசி வகை', type:'வகை', qty:'அளவு', rate:'விலை', disc:'தள்ளுபடி', amount:'தொகை',
@@ -171,14 +151,15 @@ const TAMIL = {
   total:'மொத்தம்', invoices:'விலைப்பட்டியல்கள்', salesReport:'விற்பனை அறிக்கை',
   period:'காலகட்டம்', generated:'உருவாக்கப்பட்ட தேதி', customer:'வாடிக்கையாளர்',
   phone:'தொலைபேசி', items:'பொருட்கள்', date:'தேதி',
-  amountPaid:'செலுத்திய தொகை', balance:'பேலன்ஸ் ',
+  amountPaid:'செலுத்திய தொகை', balance:'பேலன்ஸ்',
+  previousPending:'முந்தைய நிலுவை', received:'பெற்ற தொகை',
 };
 
 const ITEMS_PER_PAGE = 15;
 const BRAND = '#d4831e';
 
 // ════════════════════════════════════════════════════════════════════════════
-// generateInvoiceHTML  — single invoice, A4 portrait, 15 items/page
+// generateInvoiceHTML
 // ════════════════════════════════════════════════════════════════════════════
 function generateInvoiceHTML(sale, lang = 'english') {
   const isTamil = lang === 'tamil';
@@ -190,10 +171,12 @@ function generateInvoiceHTML(sale, lang = 'english') {
   const gstAmt  = sale.tax > 0 ? ((sale.subtotal - (sale.discount || 0)) * sale.tax / 100) : 0;
   const cgst    = gstAmt / 2;
   const netAmt  = sale.totalAmount || 0;
+  const prevPending = sale.previousPending || 0;
   const paid    = sale.amountPaid || (sale.paymentStatus === 'paid' ? netAmt : 0) || 0;
-  const balance = Math.max(0, netAmt - paid);
+  // Total owed = current bill + previous pending
+  const totalOwed = netAmt + prevPending;
+  const balance = Math.max(0, totalOwed - paid);
 
-  // Always show Tamil name: prefer stored Tamil name, else transliterate
   const displayName = isTamil
     ? (sale.customerNameTamil || transliterateToTamil(sale.customerName))
     : sale.customerName;
@@ -201,7 +184,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
     ? sale.customerAddressTamil
     : (sale.customerAddress || '');
 
-  // ── shared CSS injected once ──────────────────────────────────────────────
   const css = `
     *{margin:0;padding:0;box-sizing:border-box;}
     body{background:#fff;font-family:'Noto Sans Tamil','Segoe UI',Arial,sans-serif;color:#1a1a1a;}
@@ -213,7 +195,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
       display:flex;flex-direction:column;
     }
     .page:last-child{page-break-after:auto;}
-    /* ── header ── */
     .hdr{display:flex;justify-content:space-between;align-items:flex-start;
          border-bottom:3px solid ${BRAND};padding-bottom:10px;margin-bottom:12px;}
     .shop-name{font-size:22px;font-weight:900;color:${BRAND};font-family:Georgia,serif;}
@@ -224,7 +205,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
     .inv-date{font-size:10px;color:#888;margin-top:2px;}
     .status-pill{display:inline-block;padding:2px 8px;border-radius:20px;
       font-size:9px;font-weight:700;text-transform:uppercase;margin-top:4px;}
-    /* ── info grid ── */
     .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;
                margin-bottom:12px;padding:10px 12px;
                background:#fdf8f3;border-radius:6px;border:1px solid #f0e0c8;}
@@ -232,14 +212,12 @@ function generateInvoiceHTML(sale, lang = 'english') {
                 letter-spacing:1.5px;font-weight:800;margin-bottom:4px;}
     .info-name{font-weight:800;font-size:13px;}
     .info-sub{font-size:10px;color:#555;margin-top:2px;}
-    /* ── items table ── */
     .items-table{width:100%;border-collapse:collapse;font-size:10px;}
     .items-table thead tr{background:${BRAND};}
     .items-table th{padding:6px 5px;font-size:9px;font-weight:800;
                     text-transform:uppercase;color:#fff;white-space:nowrap;}
     .items-table td{border:1px solid #e0e0e0;padding:5px 5px;vertical-align:middle;}
     .items-table tbody tr:nth-child(even){background:#fdf9f5;}
-    /* ── totals section ── */
     .totals-wrap{display:grid;grid-template-columns:1fr 220px;
                  border-top:2px solid ${BRAND};margin-top:0;}
     .words-cell{padding:10px 12px;border-right:1px solid #ddd;font-size:10px;}
@@ -288,7 +266,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
       `<tr>${Array(9).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
     ).join('');
 
-    // ── footer varies: last page shows totals, others show "continued" ──────
     const footerHTML = isLast ? `
       <div class="totals-wrap">
         <div class="words-cell">
@@ -297,7 +274,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
           <div class="eoe">E &amp; O E</div>
         </div>
         <div class="totals-cell">
-
           ${sale.tax > 0 ? `
           <div class="totals-row">
             <span style="color:#1d4ed8;">${L('CGST', TAMIL.cgst)} (${sale.tax / 2}%)</span>
@@ -308,9 +284,18 @@ function generateInvoiceHTML(sale, lang = 'english') {
             <strong style="font-family:monospace;color:#1d4ed8;">₹${cgst.toFixed(2)}</strong>
           </div>` : ''}
           <div class="totals-grand">
-            <span>${L('Grand Total', TAMIL.grandTotal)}</span>
+            <span>${L('Current Bill Total', 'தற்போதைய பில்')}</span>
             <span style="font-family:monospace;">₹${netAmt.toFixed(2)}</span>
           </div>
+          ${prevPending > 0 ? `
+          <div class="totals-row" style="margin-top:2px;background:#fff7ed;padding:4px;">
+            <span style="color:#b45309;font-weight:700;">${L('Previous Pending', TAMIL.previousPending)}</span>
+            <strong style="font-family:monospace;color:#b45309;">+₹${prevPending.toFixed(2)}</strong>
+          </div>
+          <div class="totals-row" style="background:#fef3c7;padding:4px;font-weight:900;font-size:11px;">
+            <span style="color:#92400e;">${L('Total Payable', 'செலுத்த வேண்டிய மொத்தம்')}</span>
+            <strong style="font-family:monospace;color:#92400e;">₹${totalOwed.toFixed(2)}</strong>
+          </div>` : ''}
           ${paid > 0 ? `
           <div class="totals-row" style="margin-top:2px;">
             <span style="color:#166534;">${L('Amount Paid', TAMIL.amountPaid)}</span>
@@ -341,7 +326,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
 
     return `
       <div class="page">
-        <!-- HEADER -->
         <div class="hdr">
           <div>
             <div class="shop-name">🌾 ${isTamil ? 'சகா அரிசி கடை' : 'Saka Rice Shop'}</div>
@@ -356,7 +340,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
           </div>
         </div>
 
-        <!-- INFO GRID -->
         <div class="info-grid">
           <div>
             <div class="info-label">${L('Bill To', TAMIL.billTo)}</div>
@@ -371,6 +354,7 @@ function generateInvoiceHTML(sale, lang = 'english') {
               ${isTamil ? (TAMIL[sale.paymentMethod] || sale.paymentMethod) : sale.paymentMethod}
             </div>
             <div class="info-sub">${L('Status', TAMIL.status)}: ${isTamil ? (TAMIL[sale.paymentStatus] || sale.paymentStatus) : sale.paymentStatus}</div>
+            ${prevPending > 0 ? `<div class="info-sub" style="color:#b45309;font-weight:700;">${L('Prev.Pending', TAMIL.previousPending)}: ₹${prevPending.toFixed(2)}</div>` : ''}
             ${paid > 0 ? `<div class="info-sub" style="color:#166534;font-weight:700;">${L('Paid', TAMIL.paid)}: ₹${paid.toFixed(2)}</div>` : ''}
             ${balance > 0 ? `<div class="info-sub" style="color:#b91c1c;font-weight:700;">${L('Balance', TAMIL.balance)}: ₹${balance.toFixed(2)}</div>` : ''}
             ${sale.soldBy ? `<div class="info-sub">${L('By', TAMIL.by)}: ${sale.soldBy}</div>` : ''}
@@ -378,7 +362,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
           </div>
         </div>
 
-        <!-- ITEMS TABLE -->
         <table class="items-table">
           <thead>
             <tr>
@@ -390,7 +373,7 @@ function generateInvoiceHTML(sale, lang = 'english') {
               <th style="text-align:right;width:68px;">${L('Rate', TAMIL.rate)}</th>
               <th style="text-align:right;width:68px;">${L('Disc', TAMIL.disc)}</th>
               <th style="text-align:right;width:76px;">${L('Amount', TAMIL.amount)}</th>
-              <th style="text-align:center;width:70px;">${L('Received', 'பெற்றது')}</th>
+              <th style="text-align:center;width:70px;">${L('Received', TAMIL.received)}</th>
             </tr>
           </thead>
           <tbody>
@@ -400,8 +383,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
         </table>
 
         <div class="spacer"></div>
-
-        <!-- FOOTER / TOTALS -->
         ${footerHTML}
       </div>`;
   });
@@ -420,11 +401,7 @@ function generateInvoiceHTML(sale, lang = 'english') {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// generateReportHTML — Sales Report, A4 landscape, 15 rows/page
-//   • Every page has a proper column-aligned table.
-//   • LAST page has the grand-total row inside the table <tfoot>
-//     PLUS the summary cards below.
-//   • Customer names are transliterated to Tamil when isTamil.
+// generateReportHTML — with "Received Amount" column
 // ════════════════════════════════════════════════════════════════════════════
 function generateReportHTML(sales, periodLabel, lang = 'english') {
   const isTamil = lang === 'tamil';
@@ -434,10 +411,7 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
   const total = pages.length;
   const date  = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
 
-  // Grand aggregates
   const grandTotal    = sales.reduce((s, i) => s + (i.totalAmount || 0), 0);
-  const grandSubtotal = sales.reduce((s, i) => s + (i.subtotal || 0), 0);
-  const grandDisc     = sales.reduce((s, i) => s + (i.discount || 0), 0);
   const grandPaid     = sales.reduce((s, i) => s + (i.amountPaid || (i.paymentStatus === 'paid' ? i.totalAmount : 0) || 0), 0);
   const grandBalance  = Math.max(0, grandTotal - grandPaid);
 
@@ -452,35 +426,37 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
       display:flex;flex-direction:column;
     }
     .page:last-child{page-break-after:auto;}
-    /* header */
     .hdr{display:flex;justify-content:space-between;align-items:flex-start;
          border-bottom:3px solid ${BRAND};padding-bottom:8px;margin-bottom:10px;}
     .shop-name{font-size:18px;font-weight:900;color:${BRAND};font-family:Georgia,serif;}
     .shop-sub{font-size:8px;color:#888;text-transform:uppercase;letter-spacing:2px;margin-top:1px;}
     .period-label{font-size:12px;font-weight:800;color:#1a1a1a;}
     .period-meta{font-size:9px;color:#888;margin-top:2px;}
-    /* table */
-    .rt{width:100%;border-collapse:collapse;font-size:9.5px;}
+    .rt{width:100%;border-collapse:collapse;font-size:9px;}
     .rt thead tr{background:${BRAND};}
     .rt th{
-      padding:6px 5px;font-size:8.5px;font-weight:800;
+      padding:6px 4px;font-size:8px;font-weight:800;
       text-transform:uppercase;color:#fff;
       white-space:nowrap;text-align:left;
     }
     .rt th.r{text-align:right;}
-    .rt td{border:1px solid #e0e0e0;padding:5px 5px;vertical-align:middle;}
+    .rt th.c{text-align:center;}
+    .rt td{border:1px solid #e0e0e0;padding:5px 4px;vertical-align:middle;}
     .rt td.r{text-align:right;}
     .rt td.c{text-align:center;}
     .rt tbody tr.even{background:#fdf8f3;}
     .rt tbody tr.odd{background:#fff;}
-    /* tfoot totals row */
     .rt tfoot tr{background:${BRAND};}
     .rt tfoot td{
-      border:1px solid #b45309;padding:6px 5px;
+      border:1px solid #b45309;padding:6px 4px;
       font-size:10px;font-weight:900;color:#fff;
     }
     .rt tfoot td.r{text-align:right;}
-    /* summary cards */
+    /* Received column — empty, for handwritten note */
+    .received-cell{
+      min-width:60px;border:1px solid #e0e0e0;
+      background:#fffbf0;
+    }
     .summary{
       display:grid;grid-template-columns:repeat(4,1fr);
       border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;
@@ -494,22 +470,23 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
     .continue-note{text-align:right;margin-top:auto;padding-top:6px;
                    font-size:8.5px;color:#888;border-top:1px solid #ddd;}
     .spacer{flex:1;}
-    /* status pills */
     .pill{display:inline-block;padding:1px 6px;border-radius:10px;
           font-size:8px;font-weight:700;}
   `;
 
+  // 11 columns now (added Received)
   const headers = [
-    { label: L('Inv #', 'இல #'),       cls: '' },
-    { label: L('Date', TAMIL.date),     cls: '' },
-    { label: L('Customer', TAMIL.customer), cls: '' },
-    { label: L('Phone', TAMIL.phone),   cls: '' },
-    { label: L('Address/City', 'ஊர்'), cls: '' },
-    { label: L('Total', TAMIL.total),   cls: 'r' },
-    { label: L('Paid', TAMIL.paid),     cls: 'r' },
-    { label: L('Balance', TAMIL.balance), cls: 'r' },
-    { label: 'Method',                  cls: 'c' },
-    { label: 'Status',                  cls: 'c' },
+    { label: L('Inv #', 'இல #'),            cls: '' },
+    { label: L('Date', TAMIL.date),          cls: '' },
+    { label: L('Customer', TAMIL.customer),  cls: '' },
+    { label: L('Phone', TAMIL.phone),        cls: '' },
+    { label: L('Address/City', 'ஊர்'),      cls: '' },
+    { label: L('Total', TAMIL.total),        cls: 'r' },
+    { label: L('Paid', TAMIL.paid),          cls: 'r' },
+    { label: L('Balance', TAMIL.balance),    cls: 'r' },
+    { label: 'Method',                       cls: 'c' },
+    { label: 'Status',                       cls: 'c' },
+    { label: L('Received', TAMIL.received),  cls: 'c' },  // ← NEW empty column
   ];
 
   const headHTML = headers.map(h => `<th class="${h.cls}">${h.label}</th>`).join('');
@@ -520,24 +497,23 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
     const startIdx  = pi * ITEMS_PER_PAGE;
 
     const rowsHTML = pageSales.map((sale, i) => {
-      const paidAmt   = sale.amountPaid || (sale.paymentStatus === 'paid' ? sale.totalAmount : 0) || 0;
-      const balAmt    = Math.max(0, (sale.totalAmount || 0) - paidAmt);
-      // Always transliterate when Tamil mode; else show English
-      const custName  = isTamil
+      const paidAmt  = sale.amountPaid || (sale.paymentStatus === 'paid' ? sale.totalAmount : 0) || 0;
+      const balAmt   = Math.max(0, (sale.totalAmount || 0) - paidAmt);
+      const custName = isTamil
         ? (sale.customerNameTamil || transliterateToTamil(sale.customerName))
         : sale.customerName;
-      const rowCls    = (startIdx + i) % 2 === 0 ? 'odd' : 'even';
-      const stBg      = sale.paymentStatus === 'paid' ? '#dcfce7' : sale.paymentStatus === 'pending' ? '#fef9c3' : '#fee2e2';
-      const stCol     = sale.paymentStatus === 'paid' ? '#166534' : sale.paymentStatus === 'pending' ? '#854d0e' : '#991b1b';
-      const stLabel   = isTamil ? (TAMIL[sale.paymentStatus] || sale.paymentStatus) : sale.paymentStatus;
+      const rowCls   = (startIdx + i) % 2 === 0 ? 'odd' : 'even';
+      const stBg     = sale.paymentStatus === 'paid' ? '#dcfce7' : sale.paymentStatus === 'pending' ? '#fef9c3' : '#fee2e2';
+      const stCol    = sale.paymentStatus === 'paid' ? '#166534' : sale.paymentStatus === 'pending' ? '#854d0e' : '#991b1b';
+      const stLabel  = isTamil ? (TAMIL[sale.paymentStatus] || sale.paymentStatus) : sale.paymentStatus;
 
       return `
         <tr class="${rowCls}">
           <td style="font-weight:700;color:${BRAND};">#${sale.invoiceNumber}</td>
           <td style="white-space:nowrap;">${new Date(sale.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-          <td style="font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${custName}</td>
+          <td style="font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${custName}</td>
           <td style="color:#555;">${sale.customerPhone || '—'}</td>
-          <td style="color:#666;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sale.customerCity || sale.customerAddress || '—'}</td>
+          <td style="color:#666;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sale.customerCity || sale.customerAddress || '—'}</td>
           <td class="r" style="font-weight:700;">₹${(sale.totalAmount || 0).toFixed(2)}</td>
           <td class="r" style="color:#166534;font-weight:700;">₹${paidAmt.toFixed(2)}</td>
           <td class="r" style="color:${balAmt > 0 ? '#b91c1c' : '#166534'};font-weight:700;">
@@ -547,14 +523,18 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
           <td class="c">
             <span class="pill" style="background:${stBg};color:${stCol};">${stLabel}</span>
           </td>
+          <td class="received-cell">&nbsp;</td>
         </tr>`;
     }).join('');
 
+    // Empty rows also get the received cell
     const emptyHTML = Array(emptyRows).fill(0).map(() =>
-      `<tr class="odd">${Array(10).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
+      `<tr class="odd">
+        ${Array(10).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}
+        <td class="received-cell">&nbsp;</td>
+      </tr>`
     ).join('');
 
-    // Grand total tfoot — only on last page, inside the table
     const tfootHTML = isLast ? `
       <tfoot>
         <tr>
@@ -562,14 +542,14 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
             ${L('TOTAL', 'மொத்தம்')} — ${sales.length} ${L('invoices', TAMIL.invoices)}
           </td>
           <td></td>
+          <td></td>
           <td class="r" style="font-size:11px;">₹${grandTotal.toFixed(2)}</td>
           <td class="r" style="color:#bbf7d0;">₹${grandPaid.toFixed(2)}</td>
           <td class="r" style="color:#fecaca;">₹${grandBalance.toFixed(2)}</td>
-          <td colspan="2"></td>
+          <td colspan="3"></td>
         </tr>
       </tfoot>` : '';
 
-    // Summary cards — only on last page, below the table
     const summaryHTML = isLast ? `
       <div class="summary">
         <div class="sum-card">
@@ -600,7 +580,6 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
 
     return `
       <div class="page">
-        <!-- HEADER -->
         <div class="hdr">
           <div>
             <div class="shop-name">🌾 ${isTamil ? 'சகா அரிசி கடை' : 'Saka Rice Shop'}</div>
@@ -618,7 +597,6 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
           </div>
         </div>
 
-        <!-- TABLE -->
         <table class="rt">
           <thead><tr>${headHTML}</tr></thead>
           <tbody>${rowsHTML}${emptyHTML}</tbody>
@@ -626,7 +604,6 @@ function generateReportHTML(sales, periodLabel, lang = 'english') {
         </table>
 
         <div class="spacer"></div>
-
         ${summaryHTML}
       </div>`;
   });
@@ -651,19 +628,20 @@ function exportToCSV(sales, periodLabel) {
     [`Period: ${periodLabel}`],
     [`Generated: ${new Date().toLocaleDateString('en-IN')}`],
     [],
-    ['Invoice #','Date','Customer','Phone','Subtotal','Discount','GST %','Grand Total','Amount Paid','Balance','Method','Status'],
+    ['Invoice #','Date','Customer','Phone','Subtotal','Discount','GST %','Grand Total','Prev.Pending','Amount Paid','Balance','Method','Status'],
     ...sales.map(s => {
       const paid    = s.amountPaid||(s.paymentStatus==='paid'?s.totalAmount:0)||0;
-      const balance = Math.max(0,(s.totalAmount||0)-paid);
+      const prevP   = s.previousPending || 0;
+      const balance = Math.max(0,(s.totalAmount||0)+prevP-paid);
       return [s.invoiceNumber, new Date(s.createdAt).toLocaleDateString('en-IN'), s.customerName, s.customerPhone||'',
         s.subtotal?.toFixed(2), s.discount||0, s.tax||0, s.totalAmount?.toFixed(2),
-        paid.toFixed(2), balance.toFixed(2), s.paymentMethod, s.paymentStatus];
+        prevP.toFixed(2), paid.toFixed(2), balance.toFixed(2), s.paymentMethod, s.paymentStatus];
     }),
     [],
     ['','','','','TOTALS',
       sales.reduce((a,s)=>a+(s.subtotal||0),0).toFixed(2),
       sales.reduce((a,s)=>a+(s.discount||0),0).toFixed(2),'',
-      sales.reduce((a,s)=>a+(s.totalAmount||0),0).toFixed(2),
+      sales.reduce((a,s)=>a+(s.totalAmount||0),0).toFixed(2),'',
       sales.reduce((a,s)=>a+(s.amountPaid||(s.paymentStatus==='paid'?s.totalAmount:0)||0),0).toFixed(2),
       sales.reduce((a,s)=>a+Math.max(0,(s.totalAmount||0)-(s.amountPaid||(s.paymentStatus==='paid'?s.totalAmount:0)||0)),0).toFixed(2),
       '',''],
@@ -686,15 +664,17 @@ function openPrint(html) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// InvoiceModal — view single invoice
+// InvoiceModal
 // ══════════════════════════════════════════════════════════════════════════════
 function InvoiceModal({ sale, onClose }) {
   const [printLang, setPrintLang] = useState('english');
-  const date    = new Date(sale.createdAt);
-  const gstAmt  = sale.tax > 0 ? ((sale.subtotal - (sale.discount||0)) * sale.tax / 100) : 0;
-  const cgst    = gstAmt / 2;
-  const paid    = sale.amountPaid || (sale.paymentStatus === 'paid' ? sale.totalAmount : 0) || 0;
-  const balance = Math.max(0, (sale.totalAmount||0) - paid);
+  const date        = new Date(sale.createdAt);
+  const gstAmt      = sale.tax > 0 ? ((sale.subtotal - (sale.discount||0)) * sale.tax / 100) : 0;
+  const cgst        = gstAmt / 2;
+  const prevPending = sale.previousPending || 0;
+  const paid        = sale.amountPaid || (sale.paymentStatus === 'paid' ? sale.totalAmount : 0) || 0;
+  const totalOwed   = (sale.totalAmount||0) + prevPending;
+  const balance     = Math.max(0, totalOwed - paid);
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -734,6 +714,7 @@ function InvoiceModal({ sale, onClose }) {
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wide mb-2 flex items-center gap-1"><CreditCard className="w-3 h-3" /> Payment</p>
               <p className="text-gray-900 font-bold text-sm capitalize">{sale.paymentMethod}</p>
               <span className={`mt-1 inline-block text-xs font-bold px-2 py-0.5 rounded-full ${sale.paymentStatus==='paid'?'bg-green-100 text-green-700':sale.paymentStatus==='pending'?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{sale.paymentStatus}</span>
+              {prevPending > 0 && <p className="text-xs text-amber-600 font-bold mt-1">Prev.Pending: ₹{prevPending.toFixed(2)}</p>}
               {paid > 0 && <p className="text-xs text-green-600 font-bold mt-1">Paid: ₹{paid.toFixed(2)}</p>}
               {balance > 0 && <p className="text-xs text-red-600 font-bold mt-0.5">Balance: ₹{balance.toFixed(2)}</p>}
             </div>
@@ -769,7 +750,9 @@ function InvoiceModal({ sale, onClose }) {
               {sale.discount > 0 && <div className="flex justify-between px-4 py-3 border-b border-gray-200"><span className="text-green-700 font-bold text-sm flex items-center gap-1"><Tag className="w-3 h-3" /> Discount</span><span className="font-bold font-mono text-green-700">-₹{sale.discount?.toFixed(2)}</span></div>}
               {sale.tax > 0 && <><div className="flex justify-between px-4 py-2 border-b border-gray-100"><span className="text-blue-700 font-bold text-xs">CGST ({sale.tax/2}%)</span><span className="font-bold font-mono text-blue-700 text-xs">₹{cgst.toFixed(2)}</span></div>
               <div className="flex justify-between px-4 py-2 border-b border-gray-200"><span className="text-blue-700 font-bold text-xs">SGST ({sale.tax/2}%)</span><span className="font-bold font-mono text-blue-700 text-xs">₹{cgst.toFixed(2)}</span></div></>}
-              <div className="flex justify-between px-4 py-4 bg-brand-500"><span className="font-bold text-white text-base">Grand Total</span><span className="font-bold font-mono text-white text-lg">₹{sale.totalAmount?.toFixed(2)}</span></div>
+              <div className="flex justify-between px-4 py-4 bg-brand-500"><span className="font-bold text-white text-base">Bill Total</span><span className="font-bold font-mono text-white text-lg">₹{sale.totalAmount?.toFixed(2)}</span></div>
+              {prevPending > 0 && <div className="flex justify-between px-4 py-2 bg-amber-50 border-t border-amber-200"><span className="text-amber-700 font-bold text-sm">Previous Pending</span><span className="font-bold font-mono text-amber-700">+₹{prevPending.toFixed(2)}</span></div>}
+              {prevPending > 0 && <div className="flex justify-between px-4 py-2 bg-orange-100 border-t border-orange-200"><span className="text-orange-800 font-bold text-sm">Total Payable</span><span className="font-bold font-mono text-orange-800">₹{totalOwed.toFixed(2)}</span></div>}
               {paid > 0 && <div className="flex justify-between px-4 py-2 border-t border-gray-200"><span className="text-green-700 font-bold text-sm flex items-center gap-1"><CheckCircle className="w-3 h-3"/>Paid</span><span className="font-bold font-mono text-green-700">₹{paid.toFixed(2)}</span></div>}
               {balance > 0 && <div className="flex justify-between px-4 py-2 bg-red-50 border-t border-red-200"><span className="text-red-700 font-bold text-sm flex items-center gap-1"><AlertTriangle className="w-3 h-3"/>Balance Due</span><span className="font-bold font-mono text-red-700">₹{balance.toFixed(2)}</span></div>}
             </div>
@@ -782,7 +765,7 @@ function InvoiceModal({ sale, onClose }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// EditSaleModal — full edit with Tamil fields
+// EditSaleModal — fetches customer pending so balance is accurate
 // ══════════════════════════════════════════════════════════════════════════════
 function EditSaleModal({ sale, riceItems, onClose, onSaved }) {
   const [customer, setCustomer] = useState({
@@ -797,6 +780,8 @@ function EditSaleModal({ sale, riceItems, onClose, onSaved }) {
   const [amountPaid, setAmountPaid] = useState(sale.amountPaid||0);
   const [notes, setNotes]           = useState(sale.notes||'');
   const [saving, setSaving]         = useState(false);
+  // Previous pending stored on the sale record itself (saved when bill was created)
+  const previousPending             = sale.previousPending || 0;
 
   const getRice    = id => riceItems.find(r=>r._id===id);
   const addItem    = () => setItems(p=>[...p,{rice:'',quantity:'',itemDiscount:0}]);
@@ -812,12 +797,12 @@ function EditSaleModal({ sale, riceItems, onClose, onSaved }) {
   const afterDiscount = Math.max(0,subtotal-Number(overallDiscount));
   const gstAmount     = afterDiscount*gstRate/100;
   const grandTotal    = afterDiscount+gstAmount;
+  // Total owed = new bill total + previously saved pending
+  const totalOwed     = grandTotal + previousPending;
   const paidAmt       = Number(amountPaid)||0;
-  const totalWithOldPending = grandTotal + selectedCustomerPending;
-const balanceAmt = Math.max(0, totalWithOldPending - amountPaid);
+  const balanceAmt    = Math.max(0, totalOwed - paidAmt);
 
-  // Auto-set amountPaid when status = paid
-  useEffect(()=>{ if(paymentStatus==='paid') setAmountPaid(grandTotal.toFixed(2)); },[paymentStatus,grandTotal]);
+  useEffect(()=>{ if(paymentStatus==='paid') setAmountPaid(totalOwed.toFixed(2)); },[paymentStatus, totalOwed]);
 
   const handleSave = async () => {
     if (!customer.name.trim()) return toast.error('Customer name is required');
@@ -830,7 +815,9 @@ const balanceAmt = Math.max(0, totalWithOldPending - amountPaid);
         customerCity:customer.city.trim(), customerNameTamil:customer.nameTamil.trim(), customerAddressTamil:customer.addressTamil.trim(),
         items:validItems.map(it=>({rice:it.rice,quantity:Number(it.quantity),itemDiscount:Number(it.itemDiscount||0)})),
         discount:Number(overallDiscount), tax:gstRate, paymentMethod, paymentStatus,
-        amountPaid:paidAmt, notes,
+        amountPaid:paidAmt,
+        previousPending,   // preserve the original pending on edit
+        notes,
       };
       const res = await updateSale(sale._id, payload);
       toast.success(`Invoice #${sale.invoiceNumber} updated!`);
@@ -843,10 +830,25 @@ const balanceAmt = Math.max(0, totalWithOldPending - amountPaid);
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl my-4">
         <div className="flex items-center justify-between p-5 border-b bg-brand-500 rounded-t-2xl">
-          <div><h2 className="font-bold text-white text-lg">Edit Invoice #{sale.invoiceNumber}</h2><p className="text-white/70 text-xs">Stock will be auto-adjusted on save</p></div>
+          <div>
+            <h2 className="font-bold text-white text-lg">Edit Invoice #{sale.invoiceNumber}</h2>
+            <p className="text-white/70 text-xs">Stock will be auto-adjusted on save</p>
+          </div>
           <button onClick={onClose} className="p-2 text-white/70 hover:text-white hover:bg-white/20 rounded-xl"><X className="w-5 h-5"/></button>
         </div>
         <div className="p-5 space-y-5 max-h-[80vh] overflow-y-auto">
+
+          {/* Previous pending notice */}
+          {previousPending > 0 && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0"/>
+              <div>
+                <p className="text-sm font-bold text-amber-800">Previous Pending: ₹{previousPending.toFixed(2)}</p>
+                <p className="text-xs text-amber-600 mt-0.5">This was recorded when the bill was created. It's included in the Balance Due calculation.</p>
+              </div>
+            </div>
+          )}
+
           {/* Customer Info */}
           <div>
             <p className="font-bold text-gray-900 text-sm mb-3 flex items-center gap-2"><User className="w-4 h-4 text-brand-500"/>Customer Details</p>
@@ -916,12 +918,14 @@ const balanceAmt = Math.max(0, totalWithOldPending - amountPaid);
             </div>
           </div>
 
-          {/* Amount Paid */}
+          {/* Amount Paid — shown against totalOwed */}
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="label">Amount Paid (₹)</label>
+            <div>
+              <label className="label">Amount Paid (₹)</label>
+              {previousPending > 0 && <p className="text-xs text-amber-600 font-semibold mb-1">Total payable = ₹{grandTotal.toFixed(2)} bill + ₹{previousPending.toFixed(2)} pending = ₹{totalOwed.toFixed(2)}</p>}
               <div className="relative"><Wallet className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
                 <input type="number" className="input-field pl-9" min="0" step="0.01" value={amountPaid}
-                  onChange={e=>{ setAmountPaid(e.target.value); if(Number(e.target.value)>=grandTotal) setPaymentStatus('paid'); else if(Number(e.target.value)>0) setPaymentStatus('partial'); else setPaymentStatus('pending'); }}/>
+                  onChange={e=>{ setAmountPaid(e.target.value); const v=Number(e.target.value); if(v>=totalOwed) setPaymentStatus('paid'); else if(v>0) setPaymentStatus('partial'); else setPaymentStatus('pending'); }}/>
               </div>
             </div>
             <div className="flex items-end"><div className={`w-full p-3 rounded-xl font-bold text-sm flex items-center justify-between ${balanceAmt>0?'bg-red-50 border border-red-200 text-red-700':'bg-green-50 border border-green-200 text-green-700'}`}>
@@ -937,7 +941,9 @@ const balanceAmt = Math.max(0, totalWithOldPending - amountPaid);
               <span className="text-gray-600">Subtotal: <strong className="font-mono">₹{subtotal.toFixed(2)}</strong></span>
               {Number(overallDiscount)>0&&<span className="text-green-600">Disc: <strong>-₹{Number(overallDiscount).toFixed(2)}</strong></span>}
               {gstRate>0&&<span className="text-blue-600">GST: <strong>+₹{gstAmount.toFixed(2)}</strong></span>}
-              <span className="text-brand-600 font-bold">Total: <strong className="text-lg">₹{grandTotal.toFixed(2)}</strong></span>
+              <span className="text-brand-600 font-bold">Bill Total: <strong className="text-lg">₹{grandTotal.toFixed(2)}</strong></span>
+              {previousPending > 0 && <span className="text-amber-600 font-bold">+Pending: <strong>₹{previousPending.toFixed(2)}</strong></span>}
+              {previousPending > 0 && <span className="text-orange-700 font-bold">Payable: <strong>₹{totalOwed.toFixed(2)}</strong></span>}
               <span className={`font-bold ${balanceAmt>0?'text-red-600':'text-green-600'}`}>Balance: <strong>₹{balanceAmt.toFixed(2)}</strong></span>
             </div>
             <button onClick={handleSave} disabled={saving} className="btn-primary px-6">{saving?'Saving...':'Save Changes'}</button>
@@ -961,6 +967,8 @@ function NewBillForm({ riceItems, onSuccess }) {
   const [amountPaid, setAmountPaid] = useState(0);
   const [notes, setNotes]       = useState('');
   const [saving, setSaving]     = useState(false);
+  const [selectedCustomerPending, setSelectedCustomerPending] = useState(0);
+
   // Customer search dropdown
   const [savedCustomers, setSavedCustomers] = useState([]);
   const [custSearch, setCustSearch] = useState('');
@@ -986,21 +994,19 @@ function NewBillForm({ riceItems, onSuccess }) {
       )
     : savedCustomers;
 
-    const [selectedCustomerPending, setSelectedCustomerPending] = useState(0);
-
   const selectCustomer = c => {
-  setCustomer({
-    name: c.name,
-    phone: c.phone || '',
-    address: c.address || ''
-  });
-      setCustSearch('');
+    setCustomer({
+      name: c.name,
+      phone: c.phone || '',
+      address: c.address || '',
+      city: c.city || '',
+      nameTamil: c.nameTamil || '',
+      addressTamil: c.addressTamil || '',
+    });
+    setSelectedCustomerPending(c.pendingAmount || 0);
+    setCustSearch('');
     setShowDropdown(false);
-      setSelectedCustomerPending(c.pendingAmount || 0);
-    
   };
-
-  
 
   const addItem    = () => setItems(p=>[...p,{rice:'',quantity:'',itemDiscount:0}]);
   const removeItem = i  => setItems(p=>p.filter((_,idx)=>idx!==i));
@@ -1016,10 +1022,16 @@ function NewBillForm({ riceItems, onSuccess }) {
   const afterDiscount = Math.max(0,subtotal-Number(overallDiscount));
   const gstAmount     = afterDiscount*gstRate/100;
   const grandTotal    = afterDiscount+gstAmount;
+  // Total the customer must pay = current bill + previous pending
+  const totalOwed     = grandTotal + selectedCustomerPending;
   const paidAmt       = Number(amountPaid)||0;
-  const balanceAmt    = Math.max(0,grandTotal-paidAmt);
+  // Balance = totalOwed - paid
+  const balanceAmt    = Math.max(0, totalOwed - paidAmt);
 
-  useEffect(()=>{ if(paymentStatus==='paid') setAmountPaid(grandTotal.toFixed(2)); },[paymentStatus]);
+  // When status flipped to "paid", auto-fill totalOwed (covers pending too)
+  useEffect(()=>{
+    if(paymentStatus==='paid') setAmountPaid(totalOwed.toFixed(2));
+  },[paymentStatus, totalOwed]);
 
   const handleSubmit = async e => {
     e.preventDefault();
@@ -1034,14 +1046,17 @@ function NewBillForm({ riceItems, onSuccess }) {
         customerCity:customer.city.trim(), customerNameTamil:customer.nameTamil.trim(), customerAddressTamil:customer.addressTamil.trim(),
         items:validItems.map(it=>({rice:it.rice,quantity:Number(it.quantity),itemDiscount:Number(it.itemDiscount||0)})),
         discount:Number(overallDiscount), tax:gstRate, paymentMethod, paymentStatus,
-        amountPaid:paidAmt, notes, soldBy:adminName,
+        amountPaid:paidAmt,
+        previousPending: selectedCustomerPending,  // ← stored on the sale record
+        notes, soldBy:adminName,
       };
       const res = await createSale(payload);
       toast.success(`Bill #${res.data.data.invoiceNumber} created!`);
       onSuccess(res.data.data);
       setCustomer({name:'',phone:'',address:'',city:'',nameTamil:'',addressTamil:''});
       setItems([{rice:'',quantity:'',itemDiscount:0}]);
-      setOverallDiscount(0); setGstRate(0); setPaymentMethod('cash'); setPaymentStatus('paid'); setAmountPaid(0); setNotes('');
+      setOverallDiscount(0); setGstRate(0); setPaymentMethod('cash'); setPaymentStatus('paid');
+      setAmountPaid(0); setNotes(''); setSelectedCustomerPending(0);
     } catch (err) { toast.error(err.response?.data?.message||'Failed to create bill'); }
     finally { setSaving(false); }
   };
@@ -1065,7 +1080,6 @@ function NewBillForm({ riceItems, onSuccess }) {
               onFocus={()=>setShowDropdown(true)}
             />
           </div>
- 
           {showDropdown && filteredCustomers.length > 0 && (
             <div className="absolute z-40 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-56 overflow-y-auto">
               {filteredCustomers.map(c => {
@@ -1097,27 +1111,33 @@ function NewBillForm({ riceItems, onSuccess }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><label className="label">Customer Name</label>
-            <div className="relative"><User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+          <div>
+            <label className="label">Customer Name</label>
+            <div className="relative">
+              <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
               <input className="input-field pl-9" placeholder="Full name" value={customer.name} onChange={e=>setCustomer(c=>({...c,name:e.target.value}))} required/>
-                       {selectedCustomerPending > 0 && (
-  <div className="mt-2 text-sm font-bold text-red-600">
-    Previous Pending: ₹{selectedCustomerPending.toFixed(2)}
-  </div>
-)}
             </div>
-            
-            </div>
-     
-          <div><label className="label">Phone Number</label>
-            <div className="relative"><Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+            {selectedCustomerPending > 0 && (
+              <div className="mt-2 flex items-center gap-2 text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0"/>
+                Previous Pending: ₹{selectedCustomerPending.toFixed(2)}
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="label">Phone Number</label>
+            <div className="relative">
+              <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
               <input className="input-field pl-9" placeholder="Mobile number" value={customer.phone} onChange={e=>setCustomer(c=>({...c,phone:e.target.value}))}/>
-            </div></div>
-        
-          <div><label className="label">Address</label>
-            <div className="relative"><MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+            </div>
+          </div>
+          <div>
+            <label className="label">Address</label>
+            <div className="relative">
+              <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
               <input className="input-field pl-9" placeholder="Customer address" value={customer.address} onChange={e=>setCustomer(c=>({...c,address:e.target.value}))}/>
-            </div></div>
+            </div>
+          </div>
       
         </div>
       </div>
@@ -1189,7 +1209,7 @@ function NewBillForm({ riceItems, onSuccess }) {
             <div><label className="label">Payment Status</label>
               <div className="flex gap-2">
                 {PAYMENT_STATUSES.map(s=>(
-                  <button key={s} type="button" onClick={()=>{ setPaymentStatus(s); if(s==='paid') setAmountPaid(grandTotal.toFixed(2)); if(s==='pending') setAmountPaid(0); }}
+                  <button key={s} type="button" onClick={()=>{ setPaymentStatus(s); if(s==='paid') setAmountPaid(totalOwed.toFixed(2)); if(s==='pending') setAmountPaid(0); }}
                     className={`flex-1 py-2.5 rounded-xl text-sm font-bold capitalize border-2 transition-all ${paymentStatus===s?s==='paid'?'bg-green-600 text-white border-green-600':s==='pending'?'bg-amber-500 text-white border-amber-500':'bg-red-500 text-white border-red-500':'bg-white text-gray-700 border-gray-300 hover:border-gray-400'}`}>{s}</button>
                 ))}
               </div></div>
@@ -1197,22 +1217,29 @@ function NewBillForm({ riceItems, onSuccess }) {
         </div>
       </div>
 
-      {/* Amount Paid */}
+      {/* Amount Paid — now accounts for pending */}
       <div className="card p-5">
         <h3 className="font-display text-base font-bold text-gray-900 mb-4 flex items-center gap-2"><Wallet className="w-4 h-4 text-brand-500"/> Payment Amount</h3>
+        {selectedCustomerPending > 0 && (
+          <div className="mb-3 text-sm text-amber-700 font-semibold bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Bill Total ₹{grandTotal.toFixed(2)} + Previous Pending ₹{selectedCustomerPending.toFixed(2)} = <strong>Total Payable ₹{totalOwed.toFixed(2)}</strong>
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-4 items-end">
           <div><label className="label">Amount Paid (₹)</label>
             <div className="relative"><Wallet className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
               <input type="number" className="input-field pl-9" placeholder="0.00" min="0" step="0.01" value={amountPaid}
-                onChange={e=>{ setAmountPaid(e.target.value); const v=Number(e.target.value); if(v>=grandTotal) setPaymentStatus('paid'); else if(v>0) setPaymentStatus('partial'); else setPaymentStatus('pending'); }}/>
+                onChange={e=>{ setAmountPaid(e.target.value); const v=Number(e.target.value); if(v>=totalOwed) setPaymentStatus('paid'); else if(v>0) setPaymentStatus('partial'); else setPaymentStatus('pending'); }}/>
             </div></div>
           <div className={`p-4 rounded-xl border font-bold text-center ${balanceAmt>0?'bg-red-50 border-red-200':'bg-green-50 border-green-200'}`}>
             <p className="text-xs uppercase tracking-wide mb-1 opacity-70">Balance Due</p>
             <p className={`text-xl font-mono ${balanceAmt>0?'text-red-700':'text-green-700'}`}>₹{balanceAmt.toFixed(2)}</p>
           </div>
           <div className="p-4 rounded-xl border bg-brand-50 border-brand-200 font-bold text-center">
-            <p className="text-xs uppercase tracking-wide mb-1 text-brand-600 opacity-70">Grand Total</p>
-            <p className="text-xl font-mono text-brand-600">₹{grandTotal.toFixed(2)}</p>
+            <p className="text-xs uppercase tracking-wide mb-1 text-brand-600 opacity-70">
+              {selectedCustomerPending > 0 ? 'Total Payable' : 'Grand Total'}
+            </p>
+            <p className="text-xl font-mono text-brand-600">₹{totalOwed.toFixed(2)}</p>
           </div>
         </div>
       </div>
@@ -1230,7 +1257,9 @@ function NewBillForm({ riceItems, onSuccess }) {
             <div className="text-center"><p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Subtotal</p><p className="text-lg font-bold font-mono text-gray-900">₹{subtotal.toFixed(2)}</p></div>
             {Number(overallDiscount)>0&&<div className="text-center"><p className="text-xs font-bold text-green-600 uppercase tracking-wide">Discount</p><p className="text-lg font-bold font-mono text-green-600">-₹{Number(overallDiscount).toFixed(2)}</p></div>}
             {gstRate>0&&<div className="text-center"><p className="text-xs font-bold text-blue-600 uppercase tracking-wide">GST ({gstRate}%)</p><p className="text-lg font-bold font-mono text-blue-600">+₹{gstAmount.toFixed(2)}</p></div>}
-            <div className="text-center border-l pl-6 border-gray-200"><p className="text-xs font-bold text-brand-600 uppercase tracking-wide">Grand Total</p><p className="text-2xl font-bold font-mono text-brand-600">₹{grandTotal.toFixed(2)}</p></div>
+            <div className="text-center border-l pl-6 border-gray-200"><p className="text-xs font-bold text-brand-600 uppercase tracking-wide">Bill Total</p><p className="text-2xl font-bold font-mono text-brand-600">₹{grandTotal.toFixed(2)}</p></div>
+            {selectedCustomerPending > 0 && <div className="text-center border-l pl-6 border-gray-200"><p className="text-xs font-bold text-amber-600 uppercase tracking-wide">Prev.Pending</p><p className="text-xl font-bold font-mono text-amber-600">+₹{selectedCustomerPending.toFixed(2)}</p></div>}
+            {selectedCustomerPending > 0 && <div className="text-center border-l pl-6 border-gray-200"><p className="text-xs font-bold text-orange-700 uppercase tracking-wide">Total Payable</p><p className="text-xl font-bold font-mono text-orange-700">₹{totalOwed.toFixed(2)}</p></div>}
             {balanceAmt>0&&<div className="text-center border-l pl-6 border-gray-200"><p className="text-xs font-bold text-red-600 uppercase tracking-wide">Balance Due</p><p className="text-xl font-bold font-mono text-red-600">₹{balanceAmt.toFixed(2)}</p></div>}
           </div>
           <button type="submit" disabled={saving} className="btn-primary px-8 py-3 text-base disabled:opacity-60">
@@ -1246,8 +1275,10 @@ function NewBillForm({ riceItems, onSuccess }) {
 // ── InvoiceCreatedView ────────────────────────────────────────────────────────
 function InvoiceCreatedView({ sale, onNewBill, onViewHistory }) {
   const [printLang, setPrintLang] = useState('english');
-  const paid    = sale.amountPaid||(sale.paymentStatus==='paid'?sale.totalAmount:0)||0;
-  const balance = Math.max(0,(sale.totalAmount||0)-paid);
+  const prevPending = sale.previousPending || 0;
+  const paid        = sale.amountPaid||(sale.paymentStatus==='paid'?sale.totalAmount:0)||0;
+  const totalOwed   = (sale.totalAmount||0) + prevPending;
+  const balance     = Math.max(0, totalOwed - paid);
 
   return (
     <div className="space-y-5">
@@ -1257,7 +1288,7 @@ function InvoiceCreatedView({ sale, onNewBill, onViewHistory }) {
           <div>
             <p className="font-bold text-green-800 text-lg">Invoice #{sale.invoiceNumber} Created!</p>
             <p className="text-green-700 text-sm">{sale.customerName} • ₹{sale.totalAmount?.toFixed(2)} • {sale.paymentStatus}</p>
-            {balance > 0 && <p className="text-amber-700 text-xs font-bold mt-0.5">⚠ Balance Due: ₹{balance.toFixed(2)}</p>}
+            {balance > 0 && <p className="text-amber-700 text-xs font-bold mt-0.5">⚠ Balance Due: ₹{balance.toFixed(2)}{prevPending > 0 ? ` (includes ₹${prevPending.toFixed(2)} previous pending)` : ''}</p>}
           </div>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
@@ -1278,9 +1309,9 @@ function InvoiceCreatedView({ sale, onNewBill, onViewHistory }) {
         </div>
       </div>
 
-      {/* Payment summary cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="card p-4 text-center"><p className="text-xs text-gray-500 font-bold uppercase tracking-wide mb-1">Grand Total</p><p className="text-2xl font-bold font-mono text-brand-600">₹{sale.totalAmount?.toFixed(2)}</p></div>
+      <div className="grid grid-cols-4 gap-4">
+        <div className="card p-4 text-center"><p className="text-xs text-gray-500 font-bold uppercase tracking-wide mb-1">Bill Total</p><p className="text-2xl font-bold font-mono text-brand-600">₹{sale.totalAmount?.toFixed(2)}</p></div>
+        {prevPending > 0 && <div className="card p-4 text-center bg-amber-50 border-amber-200"><p className="text-xs text-amber-600 font-bold uppercase tracking-wide mb-1">Prev. Pending</p><p className="text-2xl font-bold font-mono text-amber-600">₹{prevPending.toFixed(2)}</p></div>}
         <div className="card p-4 text-center"><p className="text-xs text-green-600 font-bold uppercase tracking-wide mb-1">Amount Paid</p><p className="text-2xl font-bold font-mono text-green-600">₹{paid.toFixed(2)}</p></div>
         <div className={`card p-4 text-center ${balance>0?'bg-red-50 border-red-200':''}`}><p className={`text-xs font-bold uppercase tracking-wide mb-1 ${balance>0?'text-red-600':'text-gray-500'}`}>Balance Due</p><p className={`text-2xl font-bold font-mono ${balance>0?'text-red-600':'text-green-600'}`}>₹{balance.toFixed(2)}</p></div>
       </div>
@@ -1289,7 +1320,7 @@ function InvoiceCreatedView({ sale, onNewBill, onViewHistory }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// InvoiceHistory — with full edit/delete, bilingual print, balance column
+// InvoiceHistory
 // ══════════════════════════════════════════════════════════════════════════════
 function InvoiceHistory({ refresh, riceItems }) {
   const [sales, setSales]           = useState([]);
@@ -1347,10 +1378,14 @@ function InvoiceHistory({ refresh, riceItems }) {
   const handleExportCSV = async () => { const all = await fetchAll(); exportToCSV(all, periodLabel); toast.success('CSV exported!'); };
   const handlePrintReport = async () => { const all = await fetchAll(); openPrint(generateReportHTML(all, periodLabel, printLang)); };
 
-  // Totals for current page
+  // Totals for current page — balance includes previousPending
   const totalAmt     = sales.reduce((s,i)=>s+(i.totalAmount||0),0);
   const totalPaid    = sales.reduce((s,i)=>s+(i.amountPaid||(i.paymentStatus==='paid'?i.totalAmount:0)||0),0);
-  const totalBalance = sales.reduce((s,i)=>s+Math.max(0,(i.totalAmount||0)-(i.amountPaid||(i.paymentStatus==='paid'?i.totalAmount:0)||0)),0);
+  const totalBalance = sales.reduce((s,i)=>{
+    const prevP = i.previousPending || 0;
+    const paid  = i.amountPaid||(i.paymentStatus==='paid'?i.totalAmount:0)||0;
+    return s + Math.max(0,(i.totalAmount||0)+prevP-paid);
+  },0);
 
   const statusIcon = s => s==='paid'?<CheckCircle className="w-3 h-3"/>:s==='pending'?<Clock className="w-3 h-3"/>:<AlertCircle className="w-3 h-3"/>;
 
@@ -1384,7 +1419,6 @@ function InvoiceHistory({ refresh, riceItems }) {
             ))}
           </div>
           <div className="flex gap-2 flex-wrap items-center">
-            {/* Language selector for print */}
             <div className="flex rounded-xl overflow-hidden border-2 border-gray-200">
               {['english','tamil'].map(l=>(
                 <button key={l} type="button" onClick={()=>setPrintLang(l)}
@@ -1444,8 +1478,9 @@ function InvoiceHistory({ refresh, riceItems }) {
               ) : sales.length===0 ? (
                 <tr><td colSpan={10} className="text-center py-12 text-gray-400 font-bold">No invoices found for this period</td></tr>
               ) : sales.map(sale => {
+                const prevP   = sale.previousPending || 0;
                 const paid    = sale.amountPaid||(sale.paymentStatus==='paid'?sale.totalAmount:0)||0;
-                const balance = Math.max(0,(sale.totalAmount||0)-paid);
+                const balance = Math.max(0,(sale.totalAmount||0)+prevP-paid);
                 return (
                   <tr key={sale._id} className="border-b border-gray-100 hover:bg-orange-50 transition-colors">
                     <td className="px-3 py-3"><span className="text-xs font-bold font-mono text-brand-600 bg-brand-50 px-2 py-1 rounded-lg">#{sale.invoiceNumber}</span></td>
@@ -1456,7 +1491,10 @@ function InvoiceHistory({ refresh, riceItems }) {
                       {sale.customerCity && <p className="text-xs text-gray-400">{sale.customerCity}</p>}
                     </td>
                     <td className="px-3 py-3 text-sm font-bold text-gray-600">{sale.items?.length}</td>
-                    <td className="px-3 py-3"><span className="text-sm font-bold font-mono text-brand-600">₹{sale.totalAmount?.toFixed(2)}</span></td>
+                    <td className="px-3 py-3">
+                      <span className="text-sm font-bold font-mono text-brand-600">₹{sale.totalAmount?.toFixed(2)}</span>
+                      {prevP > 0 && <p className="text-xs text-amber-600 font-bold">+₹{prevP.toFixed(2)} pending</p>}
+                    </td>
                     <td className="px-3 py-3"><span className="text-sm font-bold font-mono text-green-600">₹{paid.toFixed(2)}</span></td>
                     <td className="px-3 py-3">
                       {balance>0
