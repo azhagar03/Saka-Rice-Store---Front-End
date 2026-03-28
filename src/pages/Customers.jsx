@@ -32,15 +32,14 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved }) {
   );
 
   const [saving, setSaving] = useState(false);
-  const [adjustType, setAdjustType] = useState('reduce'); // default to "Received"
-  const [inputAmount, setInputAmount] = useState(''); // ✅ separate input state
+  const [adjustType, setAdjustType] = useState('reduce');
+  const [inputAmount, setInputAmount] = useState('');
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  // ✅ Current effective pending (sales + stored manual adj)
+  // Current effective pending = salesPending + stored manualAdj
   const currentEffective = Math.max(0, existingPending + (customer?.manualPendingAdjustment ?? 0));
 
-  // ✅ Preview what pending will become after this entry
   const amt = Number(inputAmount || 0);
   const previewPending = adjustType === 'reduce'
     ? Math.max(0, currentEffective - amt)
@@ -50,12 +49,12 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved }) {
     e?.preventDefault();
     if (!form.name.trim()) return toast.error('Customer name is required');
 
-    // ✅ Compute the new manualPendingAdjustment to send to backend
     const newEffective = adjustType === 'reduce'
       ? Math.max(0, currentEffective - amt)
       : currentEffective + amt;
 
-    // manualPendingAdjustment = newEffective - existingPending (sales)
+    // newManualAdj = what we need to store so that:
+    // salesPending + newManualAdj = newEffective
     const newManualAdj = newEffective - existingPending;
 
     const payload = { ...form, manualPendingAdjustment: newManualAdj };
@@ -92,28 +91,26 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved }) {
 
         <div className="p-5 space-y-4">
 
-          {/* Name */}
           <input
             className="input-field"
             placeholder="Customer Name"
             value={form.name}
             onChange={e => set('name', e.target.value)}
           />
-             <input
+          <input
             className="input-field"
             placeholder="Contact Number"
             value={form.phone}
             onChange={e => set('phone', e.target.value)}
           />
-   <input
+          <input
             className="input-field"
             placeholder="Address"
             value={form.address}
             onChange={e => set('address', e.target.value)}
           />
 
-
-          {/* ✅ Show current balance clearly */}
+          {/* Current balance */}
           {isEdit && (
             <div className="p-3 rounded bg-amber-50 border border-amber-200">
               <p className="text-sm text-amber-700 font-semibold">
@@ -125,24 +122,21 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved }) {
           {/* Toggle */}
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => { setAdjustType('add'); setInputAmount(''); }}
-              className={`px-3 py-1 rounded ${
-                adjustType === 'add' ? 'bg-green-600 text-white' : 'bg-gray-200'
-              }`}
+              className={`px-3 py-1 rounded ${adjustType === 'add' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}
             >
               + Add
             </button>
             <button
+              type="button"
               onClick={() => { setAdjustType('reduce'); setInputAmount(''); }}
-              className={`px-3 py-1 rounded ${
-                adjustType === 'reduce' ? 'bg-red-600 text-white' : 'bg-gray-200'
-              }`}
+              className={`px-3 py-1 rounded ${adjustType === 'reduce' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
             >
               − Received
             </button>
           </div>
 
-          {/* ✅ Clean input — just the amount entered now */}
           <input
             type="number"
             className="input-field"
@@ -152,7 +146,7 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved }) {
             min={0}
           />
 
-          {/* ✅ Live preview */}
+          {/* Live preview */}
           <div className="p-3 rounded bg-gray-100">
             <p className="text-sm text-gray-500">
               {adjustType === 'reduce'
@@ -182,28 +176,25 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved }) {
 
 // ── Main Customers Page ───────────────────────────────────────────────────────
 export default function Customers() {
-  const [customers, setCustomers]         = useState([]);
-  const [loading, setLoading]             = useState(false);
-  const [search, setSearch]               = useState('');
-  const [page, setPage]                   = useState(1);
-  const [pagination, setPagination]       = useState({ total: 0, pages: 1 });
-  const [modalOpen, setModalOpen]         = useState(false);
-  const [editCustomer, setEditCustomer]   = useState(null);
-  // pendingMap: { customerId → effectivePending }
-  const [pendingMap, setPendingMap]       = useState({});
-  // salesPendingMap: { customerId → salesPending (before manual adj) }
+  const [customers, setCustomers]             = useState([]);
+  const [loading, setLoading]                 = useState(false);
+  const [search, setSearch]                   = useState('');
+  const [page, setPage]                       = useState(1);
+  const [pagination, setPagination]           = useState({ total: 0, pages: 1 });
+  const [modalOpen, setModalOpen]             = useState(false);
+  const [editCustomer, setEditCustomer]       = useState(null);
+  const [pendingMap, setPendingMap]           = useState({});
   const [salesPendingMap, setSalesPendingMap] = useState({});
   const LIMIT = 20;
 
-  // Load pending amounts from /pending/summary
   const loadPending = useCallback(async () => {
     try {
       const res = await getCustomersPending();
-      const effMap  = {};
+      const effMap   = {};
       const salesMap = {};
       for (const c of res.data.data) {
-        effMap[c._id]   = c.pendingAmount  || 0;   // effective (sales + manual)
-        salesMap[c._id] = c.salesPending   || 0;   // raw sales only
+        effMap[c._id]   = c.pendingAmount || 0;
+        salesMap[c._id] = c.salesPending  || 0;
       }
       setPendingMap(effMap);
       setSalesPendingMap(salesMap);
@@ -240,7 +231,6 @@ export default function Customers() {
 
   const handleSearch = e => { e.preventDefault(); setPage(1); load(); };
 
-  // Open edit modal — pass the raw salesPending so the modal can show breakdown
   const openEdit = c => {
     setEditCustomer(c);
     setModalOpen(true);
@@ -347,10 +337,10 @@ export default function Customers() {
                   No customers found. Click "Add Customer" to get started.
                 </td></tr>
               ) : customers.map((c, i) => {
-                const pending     = pendingMap[c._id]      || 0;
-                const salesPend   = salesPendingMap[c._id] || 0;
-                const manualAdj   = c.manualPendingAdjustment || 0;
-                const hasAdj      = manualAdj !== 0;
+                const pending   = pendingMap[c._id]      || 0;
+                const salesPend = salesPendingMap[c._id] || 0;
+                const manualAdj = c.manualPendingAdjustment || 0;
+                const hasAdj    = manualAdj !== 0;
 
                 return (
                   <tr key={c._id} className="border-b border-gray-100 hover:bg-orange-50 transition-colors">
@@ -372,7 +362,6 @@ export default function Customers() {
                           <span className="inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
                             <AlertCircle className="w-3 h-3" /> ₹{pending.toFixed(2)}
                           </span>
-                          {/* Show breakdown if there's a manual adjustment */}
                           {hasAdj && (
                             <p className="text-xs text-gray-400 mt-0.5">
                               Sales ₹{salesPend.toFixed(2)} {manualAdj >= 0 ? '+' : ''}₹{manualAdj.toFixed(2)} adj
@@ -428,7 +417,6 @@ export default function Customers() {
       {modalOpen && (
         <CustomerModal
           customer={editCustomer}
-          // Pass the raw sales-only pending so the modal shows a correct breakdown
           existingPending={editCustomer ? (salesPendingMap[editCustomer._id] || 0) : 0}
           onClose={() => { setModalOpen(false); setEditCustomer(null); }}
           onSaved={() => { load(); loadPending(); }}
