@@ -803,12 +803,9 @@ function EditSaleModal({ sale, riceItems, onClose, onSaved }) {
           <div>
             <p className="font-bold text-gray-900 text-sm mb-3 flex items-center gap-2"><User className="w-4 h-4 text-brand-500"/>Customer Details</p>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="label">Name (English) *</label><input className="input-field" value={customer.name} onChange={e=>setCustomer(c=>({...c,name:e.target.value}))}/></div>
-              <div><label className="label">Name (Tamil)</label><input className="input-field" placeholder="தமிழ் பெயர்" value={customer.nameTamil} onChange={e=>setCustomer(c=>({...c,nameTamil:e.target.value}))}/></div>
+              <div><label className="label">Name</label><input className="input-field" value={customer.name} onChange={e=>setCustomer(c=>({...c,name:e.target.value}))}/></div>
               <div><label className="label">Phone</label><input className="input-field" value={customer.phone} onChange={e=>setCustomer(c=>({...c,phone:e.target.value}))}/></div>
-              <div><label className="label">City</label><input className="input-field" placeholder="City / நகரம்" value={customer.city} onChange={e=>setCustomer(c=>({...c,city:e.target.value}))}/></div>
-              <div><label className="label">Address (English)</label><input className="input-field" value={customer.address} onChange={e=>setCustomer(c=>({...c,address:e.target.value}))}/></div>
-              <div><label className="label">Address (Tamil)</label><input className="input-field" placeholder="முகவரி தமிழில்" value={customer.addressTamil} onChange={e=>setCustomer(c=>({...c,addressTamil:e.target.value}))}/></div>
+              <div><label className="label">Address</label><input className="input-field" value={customer.address} onChange={e=>setCustomer(c=>({...c,address:e.target.value}))}/></div>
             </div>
           </div>
           <div>
@@ -1117,13 +1114,7 @@ function NewBillForm({ riceItems, onSuccess }) {
               <input className="input-field pl-9" placeholder="Customer address" value={customer.address} onChange={e=>setCustomer(c=>({...c,address:e.target.value}))}/>
             </div>
           </div>
-          <div>
-            <label className="label">City</label>
-            <div className="relative">
-              <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-              <input className="input-field pl-9" placeholder="City / நகரம்" value={customer.city} onChange={e=>setCustomer(c=>({...c,city:e.target.value}))}/>
-            </div>
-          </div>
+         
         </div>
       </div>
 
