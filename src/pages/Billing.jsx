@@ -230,7 +230,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
         <td style="text-align:center;color:#888;">${startIdx + i + 1}</td>
         <td style="font-weight:600;">${item.riceName || ''}</td>
         <td style="color:#666;">${item.riceType || ''}</td>
-        <td style="color:#666;">${sale.customerCity || ''}</td>
         <td style="text-align:right;">${item.quantity} kg</td>
         <td style="text-align:right;">₹${(item.pricePerKg || 0).toFixed(2)}</td>
         <td style="text-align:right;color:#16a34a;">${(item.itemDiscount || 0) > 0 ? '-₹' + (item.itemDiscount).toFixed(2) : '—'}</td>
@@ -239,7 +238,7 @@ function generateInvoiceHTML(sale, lang = 'english') {
       </tr>`).join('');
 
     const emptyHTML = Array(emptyRows).fill(0).map(() =>
-      `<tr>${Array(9).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
+      `<tr>${Array(8).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
     ).join('');
 
     const footerHTML = isLast ? `
@@ -325,7 +324,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
             <div class="info-name">${displayName}</div>
             ${sale.customerPhone ? `<div class="info-sub">📞 ${sale.customerPhone}</div>` : ''}
             ${displayAddress ? `<div class="info-sub">📍 ${displayAddress}</div>` : ''}
-            ${sale.customerCity ? `<div class="info-sub" style="color:#888;font-size:9px;">${sale.customerCity}</div>` : ''}
           </div>
           <div>
             <div class="info-label">${L('Payment Details', TAMIL.paymentDetails)}</div>
@@ -346,7 +344,6 @@ function generateInvoiceHTML(sale, lang = 'english') {
               <th style="width:28px;text-align:center;">#</th>
               <th style="text-align:left;min-width:120px;">${L('Rice Item', TAMIL.riceItem)}</th>
               <th style="text-align:left;width:60px;">${L('Type', TAMIL.type)}</th>
-              <th style="text-align:left;width:70px;">${L('Address', 'ஊர்')}</th>
               <th style="text-align:right;width:60px;">${L('Qty', TAMIL.qty)}</th>
               <th style="text-align:right;width:68px;">${L('Rate', TAMIL.rate)}</th>
               <th style="text-align:right;width:68px;">${L('Disc', TAMIL.disc)}</th>
@@ -378,202 +375,173 @@ function generateInvoiceHTML(sale, lang = 'english') {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// generateReportHTML
+// generateReportHTML — Tamil Ledger Style (matches handwritten image)
 // ════════════════════════════════════════════════════════════════════════════
-function generateReportHTML(sales, periodLabel, lang = 'english') {
+function generateReportHTML(sales, periodLabel, lang = 'english', filterAddress = '') {
   const isTamil = lang === 'tamil';
-  const L = (en, ta) => isTamil ? ta : en;
+  const ROWS = 22;
+  const pages = chunkArray(sales, ROWS);
+  const totalPages = pages.length;
+  const today = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'2-digit', year:'numeric' });
 
-  const pages = chunkArray(sales, ITEMS_PER_PAGE);
-  const total = pages.length;
-  const date  = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
-
-  const grandTotal    = sales.reduce((s, i) => s + (i.totalAmount || 0), 0);
-  const grandPaid     = sales.reduce((s, i) => s + (i.amountPaid || (i.paymentStatus === 'paid' ? i.totalAmount : 0) || 0), 0);
-  // ✅ Balance includes previousPending for each sale
-  const grandBalance  = sales.reduce((s, i) => {
+  const grandTotal   = sales.reduce((s, i) => s + (i.totalAmount || 0), 0);
+  const grandPaid    = sales.reduce((s, i) => s + (i.amountPaid || (i.paymentStatus === 'paid' ? i.totalAmount : 0) || 0), 0);
+  const grandBalance = sales.reduce((s, i) => {
     const prevP = i.previousPending || 0;
     const paid  = i.amountPaid || (i.paymentStatus === 'paid' ? i.totalAmount : 0) || 0;
     return s + Math.max(0, (i.totalAmount || 0) + prevP - paid);
   }, 0);
 
   const css = `
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;600;700;900&display=swap');
     *{margin:0;padding:0;box-sizing:border-box;}
-    body{background:#fff;font-family:'Noto Sans Tamil','Segoe UI',Arial,sans-serif;color:#1a1a1a;}
-    @media print{@page{size:A4 landscape;margin:0;}body{margin:0;}}
-    .page{width:297mm;min-height:210mm;background:#fff;padding:7mm 8mm;box-sizing:border-box;page-break-after:always;display:flex;flex-direction:column;}
-    .page:last-child{page-break-after:auto;}
-    .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${BRAND};padding-bottom:8px;margin-bottom:10px;}
-    .shop-name{font-size:18px;font-weight:900;color:${BRAND};font-family:Georgia,serif;}
-    .shop-sub{font-size:8px;color:#888;text-transform:uppercase;letter-spacing:2px;margin-top:1px;}
-    .period-label{font-size:12px;font-weight:800;color:#1a1a1a;}
-    .period-meta{font-size:9px;color:#888;margin-top:2px;}
-    .rt{width:100%;border-collapse:collapse;font-size:9px;}
-    .rt thead tr{background:${BRAND};}
-    .rt th{padding:6px 4px;font-size:8px;font-weight:800;text-transform:uppercase;color:#fff;white-space:nowrap;text-align:left;}
-    .rt th.r{text-align:right;}
-    .rt th.c{text-align:center;}
-    .rt td{border:1px solid #e0e0e0;padding:5px 4px;vertical-align:middle;}
-    .rt td.r{text-align:right;}
-    .rt td.c{text-align:center;}
-    .rt tbody tr.even{background:#fdf8f3;}
-    .rt tbody tr.odd{background:#fff;}
-    .rt tfoot tr{background:${BRAND};}
-    .rt tfoot td{border:1px solid #b45309;padding:6px 4px;font-size:10px;font-weight:900;color:#fff;}
-    .rt tfoot td.r{text-align:right;}
-    .summary{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;margin-top:10px;}
-    .sum-card{padding:10px 12px;border-right:1px solid #e0e0e0;}
-    .sum-card:last-child{border-right:none;}
-    .sum-title{font-size:8px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;}
-    .sum-val{font-size:15px;font-weight:900;}
-    .footer-note{text-align:center;margin-top:8px;font-size:8.5px;color:#aaa;}
-    .continue-note{text-align:right;margin-top:auto;padding-top:6px;font-size:8.5px;color:#888;border-top:1px solid #ddd;}
+    body{font-family:'Noto Sans Tamil',Arial,sans-serif;background:#fff;color:#111;font-size:11px;}
+    @media print{@page{size:A4 landscape;margin:0;}body{margin:0;}
+      .page{page-break-after:always;}.page:last-child{page-break-after:auto;}}
+    .page{width:297mm;min-height:210mm;padding:8mm 10mm;box-sizing:border-box;display:flex;flex-direction:column;background:#fff;}
+    .top-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:flex-start;margin-bottom:4px;}
+    .shop-name{font-size:15px;font-weight:900;color:#1a1a1a;}
+    .shop-sub{font-size:9px;color:#666;margin-top:1px;}
+    .center-block{text-align:center;}
+    .center-title{font-size:14px;font-weight:900;border-bottom:2px solid #1a1a1a;padding-bottom:2px;display:inline-block;}
+    .center-sub{font-size:9px;color:#555;margin-top:3px;}
+    .date-block{text-align:right;}
+    .date-val{font-size:13px;font-weight:700;}
+    .divider{border-top:2.5px solid #1a1a1a;margin:5px 0;}
+    table{width:100%;border-collapse:collapse;font-size:9.5px;}
+    thead tr{border-bottom:2px solid #1a1a1a;}
+    thead th{padding:4px 3px;font-weight:900;font-size:9px;text-align:left;border-right:1px solid #bbb;border-bottom:2px solid #1a1a1a;white-space:nowrap;}
+    thead th:last-child{border-right:none;}
+    thead th.r{text-align:right;}
+    thead th.c{text-align:center;}
+    tbody tr{border-bottom:1px solid #ddd;}
+    tbody td{padding:4px 3px;vertical-align:middle;border-right:1px solid #ddd;}
+    tbody td:last-child{border-right:none;}
+    tbody td.r{text-align:right;}
+    tbody td.c{text-align:center;}
+    tbody td.name{font-weight:700;font-size:10px;}
+    tbody td.bal{text-align:right;font-weight:800;}
+    tbody td.bal.red{color:#b91c1c;}
+    tbody td.bal.green{color:#166534;font-size:9px;}
+    .empty-row td{height:20px;border-bottom:1px solid #eee;}
     .spacer{flex:1;}
-    .pill{display:inline-block;padding:1px 6px;border-radius:10px;font-size:8px;font-weight:700;}
+    .summary-row{display:flex;justify-content:space-between;align-items:center;border-top:2px solid #1a1a1a;margin-top:6px;padding-top:5px;}
+    .sum-item{text-align:center;}
+    .sum-label{font-size:8px;color:#555;font-weight:700;text-transform:uppercase;}
+    .sum-val{font-size:12px;font-weight:900;}
+    .footer-note{text-align:center;margin-top:5px;font-size:8px;color:#999;border-top:1px solid #eee;padding-top:3px;}
+    .area-badge{text-align:center;margin-bottom:4px;font-size:11px;font-weight:700;color:#d4831e;border:1px dashed #d4831e;border-radius:4px;padding:3px;}
   `;
 
-  const headers = [
-    { label: L('Inv #', 'இல #'),            cls: '' },
-    { label: L('Date', TAMIL.date),          cls: '' },
-    { label: L('Customer', TAMIL.customer),  cls: '' },
-    { label: L('Phone', TAMIL.phone),        cls: '' },
-    { label: L('Address/City', 'ஊர்'),      cls: '' },
-    { label: L('Bill Total', 'பில் தொகை'), cls: 'r' },
-    { label: L('Prev Pending', TAMIL.previousPending), cls: 'r' },
-    { label: L('Total Payable', 'செலுத்த வேண்டியது'), cls: 'r' },
-    { label: L('Paid', TAMIL.paid),          cls: 'r' },
-    { label: L('Balance', TAMIL.balance),    cls: 'r' },
-    { label: 'Method',                       cls: 'c' },
-    { label: 'Status',                       cls: 'c' },
-  ];
+  const pageHTMLs = pages.map((pageSales, pi) => {
+    const isLast = pi === totalPages - 1;
+    const emptyRows = Math.max(0, ROWS - pageSales.length);
 
-  const headHTML = headers.map(h => `<th class="${h.cls}">${h.label}</th>`).join('');
-
-  const pageHTMLArr = pages.map((pageSales, pi) => {
-    const isLast    = pi === total - 1;
-    const emptyRows = Math.max(0, ITEMS_PER_PAGE - pageSales.length);
-    const startIdx  = pi * ITEMS_PER_PAGE;
-
-    const rowsHTML = pageSales.map((sale, i) => {
+    const rowsHTML = pageSales.map((sale, idx) => {
       const prevP   = sale.previousPending || 0;
       const paidAmt = sale.amountPaid || (sale.paymentStatus === 'paid' ? sale.totalAmount : 0) || 0;
-      // ✅ CORRECT: totalOwed = bill + prevPending; balance = totalOwed - paid
-      const totalOwedRow = (sale.totalAmount || 0) + prevP;
-      const balAmt  = Math.max(0, totalOwedRow - paidAmt);
+      const totalOwed = (sale.totalAmount || 0) + prevP;
+      const balAmt  = Math.max(0, totalOwed - paidAmt);
       const custName = isTamil
         ? (sale.customerNameTamil || transliterateToTamil(sale.customerName))
         : sale.customerName;
-      const rowCls  = (startIdx + i) % 2 === 0 ? 'odd' : 'even';
-      const stBg    = sale.paymentStatus === 'paid' ? '#dcfce7' : sale.paymentStatus === 'pending' ? '#fef9c3' : '#fee2e2';
-      const stCol   = sale.paymentStatus === 'paid' ? '#166534' : sale.paymentStatus === 'pending' ? '#854d0e' : '#991b1b';
-      const stLabel = isTamil ? (TAMIL[sale.paymentStatus] || sale.paymentStatus) : sale.paymentStatus;
-
-      return `
-        <tr class="${rowCls}">
-          <td style="font-weight:700;color:${BRAND};">#${sale.invoiceNumber}</td>
-          <td style="white-space:nowrap;">${new Date(sale.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-          <td style="font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${custName}</td>
-          <td style="color:#555;">${sale.customerPhone || '—'}</td>
-          <td style="color:#666;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sale.customerCity || sale.customerAddress || '—'}</td>
-          <td class="r" style="font-weight:700;">₹${(sale.totalAmount || 0).toFixed(2)}</td>
-          <td class="r" style="color:#b45309;font-weight:700;">${prevP > 0 ? '₹' + prevP.toFixed(2) : '—'}</td>
-          <td class="r" style="color:#92400e;font-weight:800;">₹${totalOwedRow.toFixed(2)}</td>
-          <td class="r" style="color:#166534;font-weight:700;">₹${paidAmt.toFixed(2)}</td>
-          <td class="r" style="color:${balAmt > 0 ? '#b91c1c' : '#166534'};font-weight:700;">
-            ${balAmt > 0 ? '₹' + balAmt.toFixed(2) : '✓'}
-          </td>
-          <td class="c" style="text-transform:capitalize;">${sale.paymentMethod}</td>
-          <td class="c">
-            <span class="pill" style="background:${stBg};color:${stCol};">${stLabel}</span>
-          </td>
-        </tr>`;
+      const stLabel = isTamil
+        ? (sale.paymentStatus === 'paid' ? 'செலுத்தியது' : sale.paymentStatus === 'pending' ? 'நிலுவை' : 'பகுதி')
+        : sale.paymentStatus;
+      const hasBal = balAmt > 0;
+      return `<tr>
+        <td style="font-size:8.5px;color:#d4831e;font-weight:700;">#${sale.invoiceNumber}</td>
+        <td style="font-size:8.5px;color:#555;">${new Date(sale.createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'})}</td>
+        <td class="name">${custName}</td>
+        <td style="font-size:9px;color:#555;">${sale.customerPhone || '—'}</td>
+        <td style="font-size:9px;color:#666;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sale.customerAddress || '—'}</td>
+        <td class="r">₹${(sale.totalAmount||0).toFixed(2)}</td>
+        <td class="r" style="color:#b45309;">${prevP > 0 ? '₹'+prevP.toFixed(2) : '—'}</td>
+        <td class="r" style="color:#166534;font-weight:700;">₹${paidAmt.toFixed(2)}</td>
+        <td class="bal ${hasBal?'red':'green'}">${hasBal ? '₹'+balAmt.toFixed(2) : '✓'}</td>
+        <td class="c" style="font-size:8.5px;">${stLabel}</td>
+      </tr>`;
     }).join('');
 
     const emptyHTML = Array(emptyRows).fill(0).map(() =>
-      `<tr class="odd">${Array(12).fill('<td style="border:1px solid #eee;padding:5px;">&nbsp;</td>').join('')}</tr>`
+      `<tr class="empty-row"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`
     ).join('');
 
-    const tfootHTML = isLast ? `
-      <tfoot>
-        <tr>
-          <td colspan="5" style="font-size:10px;">${L('TOTAL', 'மொத்தம்')} — ${sales.length} ${L('invoices', TAMIL.invoices)}</td>
-          <td class="r" style="font-size:11px;">₹${grandTotal.toFixed(2)}</td>
-          <td class="r"></td>
-          <td class="r"></td>
-          <td class="r" style="color:#bbf7d0;">₹${grandPaid.toFixed(2)}</td>
-          <td class="r" style="color:#fecaca;">₹${grandBalance.toFixed(2)}</td>
-          <td colspan="2"></td>
-        </tr>
-      </tfoot>` : '';
+    const footerHTML = isLast ? `
+      <div class="spacer"></div>
+      <div class="summary-row">
+        <div class="sum-item"><div class="sum-label">${isTamil?'மொத்த பில்கள்':'Total Invoices'}</div><div class="sum-val">${sales.length}</div></div>
+        <div class="sum-item"><div class="sum-label">${isTamil?'மொத்த தொகை':'Grand Total'}</div><div class="sum-val">₹${grandTotal.toFixed(2)}</div></div>
+        <div class="sum-item"><div class="sum-label">${isTamil?'வரவு':'Total Paid'}</div><div class="sum-val" style="color:#166534;">₹${grandPaid.toFixed(2)}</div></div>
+        <div class="sum-item"><div class="sum-label">${isTamil?'மொத்த நிலுவை':'Total Balance'}</div><div class="sum-val" style="color:#b91c1c;">₹${grandBalance.toFixed(2)}</div></div>
+      </div>
+      <div class="footer-note">${isTamil?'கணினி மூலம் உருவாக்கப்பட்டது — சகா அரிசி கடை':'Computer Generated — Saka Rice Shop'}</div>` :
+      `<div class="spacer"></div><div style="text-align:right;font-size:8px;color:#888;margin-top:4px;">அடுத்த பக்கம்... ${pi+1}/${totalPages}</div>`;
 
-    const summaryHTML = isLast ? `
-      <div class="summary">
-        <div class="sum-card">
-          <div class="sum-title">${L('Total Invoices', 'மொத்த விலைப்பட்டியல்')}</div>
-          <div class="sum-val" style="color:#1a1a1a;">${sales.length}</div>
+    const centerTitle = filterAddress
+      ? filterAddress
+      : (isTamil ? 'விற்பனை அறிக்கை' : 'Sales Report');
+
+    return `<div class="page">
+      <div class="top-header">
+        <div>
+          <div class="shop-name">🌾 ${isTamil ? 'சகா அரிசி கடை' : 'Saka Rice Shop'}</div>
+          <div class="shop-sub">${isTamil ? 'விற்பனை அறிக்கை' : 'Sales Report'} · ${periodLabel}</div>
         </div>
-        <div class="sum-card">
-          <div class="sum-title">${L('Grand Total', TAMIL.grandTotal)}</div>
-          <div class="sum-val" style="color:${BRAND};">₹${grandTotal.toFixed(2)}</div>
+        <div class="center-block">
+          <div class="center-title">${centerTitle}</div>
+          ${filterAddress ? `<div class="center-sub">${isTamil?'பகுதி வாடிக்கையாளர் விற்பனை':'Area-wise Sales'}</div>` : ''}
         </div>
-        <div class="sum-card">
-          <div class="sum-title">${L('Total Paid', TAMIL.paid)}</div>
-          <div class="sum-val" style="color:#166534;">₹${grandPaid.toFixed(2)}</div>
-        </div>
-        <div class="sum-card" style="${grandBalance > 0 ? 'background:#fef2f2;' : ''}">
-          <div class="sum-title">${L('Total Balance Due', TAMIL.balance)}</div>
-          <div class="sum-val" style="color:${grandBalance > 0 ? '#b91c1c' : '#166534'};">₹${grandBalance.toFixed(2)}</div>
+        <div class="date-block">
+          <div class="date-val">${today}</div>
+          <div style="font-size:8.5px;color:#888;">${isTamil?'பக்கம்':'Page'} ${pi+1}/${totalPages}</div>
         </div>
       </div>
-      <div class="footer-note">
-        ${L('Computer Generated Sales Report — Saka Rice Shop', 'கணினி மூலம் உருவாக்கப்பட்ட விற்பனை அறிக்கை — சகா அரிசி கடை')}
-      </div>` : `<div class="continue-note">
-        ${L('Continued on next page...', TAMIL.continued)} &nbsp;
-        ${L('Page', TAMIL.page)} ${pi + 1} / ${total}
-      </div>`;
-
-    return `
-      <div class="page">
-        <div class="hdr">
-          <div>
-            <div class="shop-name">🌾 ${isTamil ? 'சகா அரிசி கடை' : 'Saka Rice Shop'}</div>
-            <div class="shop-sub">${L('Sales History Report', TAMIL.salesReport)}</div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:8.5px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1.5px;">${L('Period', TAMIL.period)}</div>
-            <div class="period-label">${periodLabel}</div>
-            <div class="period-meta">${L('Generated', TAMIL.generated)}: ${date} &nbsp;|&nbsp; ${L('Page', TAMIL.page)} ${pi + 1} / ${total}</div>
-          </div>
-        </div>
-        <table class="rt">
-          <thead><tr>${headHTML}</tr></thead>
-          <tbody>${rowsHTML}${emptyHTML}</tbody>
-          ${tfootHTML}
-        </table>
-        <div class="spacer"></div>
-        ${summaryHTML}
-      </div>`;
+      <div class="divider"></div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:7%;">${isTamil?'பில் #':'Inv #'}</th>
+            <th style="width:9%;">${isTamil?'தேதி':'Date'}</th>
+            <th style="width:16%;">${isTamil?'பெயர்':'Customer'}</th>
+            <th style="width:10%;">${isTamil?'கைபேசி':'Phone'}</th>
+            <th style="width:11%;">${isTamil?'முகவரி':'Address'}</th>
+            <th class="r" style="width:11%;">${isTamil?'பில் தொகை':'Bill Total'}</th>
+            <th class="r" style="width:10%;">${isTamil?'முந்தைய நிலுவை':'Prev Pending'}</th>
+            <th class="r" style="width:11%;">${isTamil?'வரவு':'Paid'}</th>
+            <th class="r" style="width:10%;">${isTamil?'நிலுவை (பாக்கி)':'Balance'}</th>
+            <th class="c" style="width:9%;">${isTamil?'நிலை':'Status'}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHTML}
+          ${emptyHTML}
+        </tbody>
+      </table>
+      ${footerHTML}
+    </div>`;
   });
 
   return `<!DOCTYPE html>
 <html lang="${isTamil ? 'ta' : 'en'}">
 <head>
   <meta charset="UTF-8">
-  <title>${L('Sales Report', 'விற்பனை அறிக்கை')} — Saka Rice Shop</title>
+  <title>${isTamil?'விற்பனை அறிக்கை':'Sales Report'} — Saka Rice Shop</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;600;700;900&display=swap" rel="stylesheet">
   <style>${css}</style>
 </head>
-<body>${pageHTMLArr.join('')}</body>
+<body>${pageHTMLs.join('')}</body>
 </html>`;
 }
+
 
 // ── CSV export ─────────────────────────────────────────────────────────────────
 function exportToCSV(sales, periodLabel) {
   const rows = [
     ['SAKA RICE SHOP — SALES REPORT'],
-    [`Period: ${periodLabel}`],
-    [`Generated: ${new Date().toLocaleDateString('en-IN')}`],
+    ['Period: ' + periodLabel],
+    ['Generated: ' + new Date().toLocaleDateString('en-IN')],
     [],
     ['Invoice #','Date','Customer','Phone','Bill Total','Prev.Pending','Total Payable','Amount Paid','Balance Due','Method','Status'],
     ...sales.map(s => {
@@ -595,13 +563,14 @@ function exportToCSV(sales, periodLabel) {
       },0).toFixed(2),
       '',''],
   ];
-  const csv  = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;
-  a.download = `SalesReport_${periodLabel.replace(/\s+/g,'_')}_${new Date().toLocaleDateString('en-IN').replace(/\//g,'-')}.csv`;
-  a.click(); URL.revokeObjectURL(url);
+  a.download = 'SalesReport_' + periodLabel.replace(/\s+/g,'_') + '_' + new Date().toLocaleDateString('en-IN').replace(/\//g,'-') + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function openPrint(html) {
@@ -638,7 +607,8 @@ function InvoiceModal({ sale, onClose }) {
             <div className="flex rounded-xl overflow-hidden border border-white/30">
               {['english','tamil'].map(l => (
                 <button key={l} onClick={() => setPrintLang(l)}
-                  className={`px-3 py-1.5 text-xs font-bold capitalize transition-all ${printLang===l?'bg-white text-brand-600':'text-white/70 hover:bg-white/20'}`}>
+                  className={`px-3 py-1.5 text-xs font-bold capitalize transition-all ${printLang===l?'bg-white text-brand-600':'text-white/70 hover:bg-white/20'}`}
+                >
                   {l === 'english' ? '🇬🇧 EN' : '🇮🇳 TN'}
                 </button>
               ))}
@@ -658,7 +628,6 @@ function InvoiceModal({ sale, onClose }) {
               {sale.customerNameTamil && <p className="text-gray-500 text-xs mt-0.5">{sale.customerNameTamil}</p>}
               {sale.customerPhone && <p className="text-gray-600 text-xs mt-1">📞 {sale.customerPhone}</p>}
               {sale.customerAddress && <p className="text-gray-600 text-xs mt-1">📍 {sale.customerAddress}</p>}
-              {sale.customerCity && <p className="text-gray-500 text-xs mt-0.5">{sale.customerCity}</p>}
             </div>
             <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wide mb-2 flex items-center gap-1"><CreditCard className="w-3 h-3" /> Payment</p>
@@ -725,7 +694,7 @@ function InvoiceModal({ sale, onClose }) {
 function EditSaleModal({ sale, riceItems, onClose, onSaved }) {
   const [customer, setCustomer] = useState({
     name: sale.customerName, phone: sale.customerPhone||'', address: sale.customerAddress||'',
-    city: sale.customerCity||'', nameTamil: sale.customerNameTamil||'', addressTamil: sale.customerAddressTamil||''
+    nameTamil: sale.customerNameTamil||'', addressTamil: sale.customerAddressTamil||''
   });
   const [items, setItems]           = useState(sale.items.map(i=>({rice:i.rice?._id||i.rice,quantity:i.quantity,itemDiscount:i.itemDiscount||0})));
   const [overallDiscount, setOverallDiscount] = useState(sale.discount||0);
@@ -766,7 +735,7 @@ function EditSaleModal({ sale, riceItems, onClose, onSaved }) {
     try {
       const payload = {
         customerName:customer.name.trim(), customerPhone:customer.phone.trim(), customerAddress:customer.address.trim(),
-        customerCity:customer.city.trim(), customerNameTamil:customer.nameTamil.trim(), customerAddressTamil:customer.addressTamil.trim(),
+        customerNameTamil:customer.nameTamil.trim(), customerAddressTamil:customer.addressTamil.trim(),
         items:validItems.map(it=>({rice:it.rice,quantity:Number(it.quantity),itemDiscount:Number(it.itemDiscount||0)})),
         discount:Number(overallDiscount), tax:gstRate, paymentMethod, paymentStatus,
         amountPaid:paidAmt,
@@ -898,7 +867,7 @@ function EditSaleModal({ sale, riceItems, onClose, onSaved }) {
 // NewBillForm
 // ══════════════════════════════════════════════════════════════════════════════
 function NewBillForm({ riceItems, onSuccess }) {
-  const [customer, setCustomer] = useState({ name:'', phone:'', address:'', city:'', nameTamil:'', addressTamil:'' });
+  const [customer, setCustomer] = useState({ name:'', phone:'', address:'', nameTamil:'', addressTamil:'' });
   const [items, setItems]       = useState([{ rice:'', quantity:'', itemDiscount:0 }]);
   const [overallDiscount, setOverallDiscount] = useState(0);
   const [gstRate, setGstRate]   = useState(0);
@@ -931,7 +900,6 @@ function NewBillForm({ riceItems, onSuccess }) {
     ? savedCustomers.filter(c =>
         c.name?.toLowerCase().includes(custSearch.toLowerCase()) ||
         c.phone?.includes(custSearch) ||
-        c.city?.toLowerCase().includes(custSearch.toLowerCase()) ||
         c.address?.toLowerCase().includes(custSearch.toLowerCase())
       )
     : savedCustomers;
@@ -939,7 +907,7 @@ function NewBillForm({ riceItems, onSuccess }) {
   const selectCustomer = c => {
     setCustomer({
       name: c.name, phone: c.phone || '', address: c.address || '',
-      city: c.city || '', nameTamil: c.nameTamil || '', addressTamil: c.addressTamil || '',
+      nameTamil: c.nameTamil || '', addressTamil: c.addressTamil || '',
     });
     setSelectedCustomerPending(c.pendingAmount || 0);
     setSelectedCustomerId(c._id || null);
@@ -1018,7 +986,7 @@ function NewBillForm({ riceItems, onSuccess }) {
       const adminName = sessionStorage.getItem('saka_admin_name') || 'Admin';
       const payload = {
         customerName:customer.name.trim(), customerPhone:customer.phone.trim(), customerAddress:customer.address.trim(),
-        customerCity:customer.city.trim(), customerNameTamil:customer.nameTamil.trim(), customerAddressTamil:customer.addressTamil.trim(),
+        customerNameTamil:customer.nameTamil.trim(), customerAddressTamil:customer.addressTamil.trim(),
         items:validItems.map(it=>({rice:it.rice,quantity:Number(it.quantity),itemDiscount:Number(it.itemDiscount||0)})),
         discount:Number(overallDiscount), tax:gstRate, paymentMethod, paymentStatus,
         amountPaid:paidAmt,
@@ -1033,7 +1001,7 @@ function NewBillForm({ riceItems, onSuccess }) {
 
       onSuccess(res.data.data);
       // Reset
-      setCustomer({name:'',phone:'',address:'',city:'',nameTamil:'',addressTamil:''});
+      setCustomer({name:'',phone:'',address:'',nameTamil:'',addressTamil:''});
       setItems([{rice:'',quantity:'',itemDiscount:0}]);
       setOverallDiscount(0); setGstRate(0); setPaymentMethod('cash'); setPaymentStatus('paid');
       setAmountPaid(0); setNotes('');
@@ -1054,7 +1022,7 @@ function NewBillForm({ riceItems, onSuccess }) {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
             <input
               className="input-field pl-9"
-              placeholder="Type name, phone, city / பெயர், ஊர்..."
+              placeholder="Type name, phone, address / பெயர், முகவரி..."
               value={custSearch}
               onChange={e=>{ setCustSearch(e.target.value); setShowDropdown(true); }}
               onFocus={()=>setShowDropdown(true)}
@@ -1071,7 +1039,7 @@ function NewBillForm({ riceItems, onSuccess }) {
                       <div>
                         <span className="font-bold text-sm text-gray-900">{c.name}</span>
                         {c.nameTamil && <span className="text-xs text-gray-500 ml-2">{c.nameTamil}</span>}
-                        <div className="text-xs text-gray-400 mt-0.5">{c.phone && <span>{c.phone}</span>}{c.city && <span className="ml-2">• {c.city}</span>}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">{c.phone && <span>{c.phone}</span>}{c.address && <span className="ml-2">• {c.address}</span>}</div>
                       </div>
                       {pending > 0 && (
                         <span className="flex-shrink-0 text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
@@ -1346,7 +1314,7 @@ function InvoiceHistory({ refresh, riceItems }) {
   const [pagination, setPagination] = useState({});
   const [viewSale, setViewSale]     = useState(null);
   const [editSale, setEditSale]     = useState(null);
-  const [printLang, setPrintLang]   = useState('english');
+  const [printLang, setPrintLang]   = useState('tamil');
 
   const periodLabel = period !== 'custom'
     ? PERIODS.find(p=>p.value===period)?.label || period
@@ -1382,7 +1350,7 @@ function InvoiceHistory({ refresh, riceItems }) {
     catch { toast.error('Failed to load invoice'); }
   };
   const handleExportCSV = async () => { const all = await fetchAll(); exportToCSV(all, periodLabel); toast.success('CSV exported!'); };
-  const handlePrintReport = async () => { const all = await fetchAll(); openPrint(generateReportHTML(all, periodLabel, printLang)); };
+  const handlePrintReport = async () => { const all = await fetchAll(); openPrint(generateReportHTML(all, periodLabel, printLang, search.trim())); };
 
   // ✅ CORRECT: balance includes previousPending for each sale
   const totalAmt     = sales.reduce((s,i)=>s+(i.totalAmount||0),0);
@@ -1454,7 +1422,7 @@ function InvoiceHistory({ refresh, riceItems }) {
           <div className="flex-1 min-w-48">
             <label className="label">Search</label>
             <div className="relative"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-              <input className="input-field pl-9" placeholder="Invoice, name, phone, city / பெயர், ஊர்…" value={search} onChange={e=>setSearch(e.target.value)}/>
+              <input className="input-field pl-9" placeholder="Invoice, name, phone, address / பெயர், முகவரி…" value={search} onChange={e=>setSearch(e.target.value)}/>
             </div>
           </div>
           <button type="submit" className="btn-primary"><Search className="w-4 h-4"/> Search</button>
@@ -1493,7 +1461,6 @@ function InvoiceHistory({ refresh, riceItems }) {
                       <p className="text-sm font-bold text-gray-900">{sale.customerName}</p>
                       {sale.customerNameTamil && <p className="text-xs text-gray-400">{sale.customerNameTamil}</p>}
                       {sale.customerPhone && <p className="text-xs text-gray-500">{sale.customerPhone}</p>}
-                      {sale.customerCity && <p className="text-xs text-gray-400">{sale.customerCity}</p>}
                     </td>
                     <td className="px-3 py-3 text-sm font-bold text-gray-600">{sale.items?.length}</td>
                     <td className="px-3 py-3">
