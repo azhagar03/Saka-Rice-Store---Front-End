@@ -255,7 +255,7 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
             <th class="r" style="width:14%;">மொத்த தொகை</th>
             <th class="r" style="width:14%;">வரவு</th>
             <th class="r" style="width:14%;">நிலுவை (பாக்கி)</th>
-            <th style="width:14%;">பெற்றது &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>
+            <th style="width:14%;">சிப்பம் &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>
             <th class="c" style="width:8%;">தேதி</th>
           </tr>
         </thead>
