@@ -7,6 +7,7 @@ import Inventory from './pages/Inventory';
 import Billing from './pages/Billing';
 import Customers from './pages/Customers';
 import Login from './pages/Login';
+import LogoImg from './assets/LogoImg.png';
 import {
   LayoutDashboard, Package,
   Store, Menu, Receipt, LogOut, ShieldCheck, Users
@@ -32,13 +33,13 @@ function Sidebar({ open, setOpen, onLogout }) {
       <aside className={`fixed lg:static inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-200 flex flex-col transition-transform duration-300 shadow-lg ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="p-5 border-b border-orange-600/20 bg-brand-500">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-              <Store className="w-5 h-5 text-white" />
+            <div className="w-20 h-20 bg-white/20 rounded-xl flex items-center justify-center">
+                             <img src={LogoImg} alt="" className="w-20 h-20 object-contain" />
+
             </div>
             <div>
               <h1 className="font-display text-base font-bold text-white leading-tight">Saka Rice Shop</h1>
               <div className="flex items-center gap-1 mt-0.5">
-                <ShieldCheck className="w-3 h-3 text-white/60" />
                 <p className="text-[10px] text-white/70 uppercase tracking-widest font-bold">Billing Software</p>
               </div>
             </div>

@@ -100,7 +100,7 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
   });
 
   // ── FIX 1: Increased rows per page since we removed empty padding rows ──
-  const ROWS_PER_PAGE = 30;
+  const ROWS_PER_PAGE = 35;
   const pages = chunkArray(sortedCustomers, ROWS_PER_PAGE);
   const totalPages = pages.length;
   const today = dateStr || new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'2-digit', year:'numeric' });
@@ -301,7 +301,7 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
 // ════════════════════════════════════════════════════════════════════════════
 function generateInvoiceHistoryPDF(customer, salesWithBalance, totalQtyAll, totalBilled, totalPaidAll, finalBalance) {
   const today = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'2-digit', year:'numeric' });
-  const ROWS_PER_PAGE = 25;
+  const ROWS_PER_PAGE = 35;
   const pages = chunkArray(salesWithBalance, ROWS_PER_PAGE);
   const totalPages = pages.length;
   const nameTA = customer.nameTamil || transliterateToTamil(customer.name);
