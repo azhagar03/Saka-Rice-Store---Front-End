@@ -52,6 +52,7 @@ const EN_TO_TAMIL_MAP = [
   ['ha','ஹா'],['hi','ஹி'],['hu','ஹு'],['he','ஹே'],['ho','ஹோ'],['h','ஹ்'],
   ['x','க்ஸ்'],['q','க்'],
 ];
+
 function transliterateToTamil(name) {
   if (!name) return '';
   return name.split(' ').map(word => {
@@ -67,6 +68,7 @@ function transliterateToTamil(name) {
   }).join(' ');
 }
 
+// ── chunk array for pagination ────────────────────────────────────────────────
 const chunkArray = (arr, size) => {
   const pages = [];
   for (let i = 0; i < arr.length; i += size) pages.push(arr.slice(i, i + size));
@@ -83,18 +85,28 @@ function openPrint(html) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// MAIN PDF GENERATOR — Exact match to handwritten ledger image
-// Layout: Shop name top-left | Area name center | Date top-right
-// Columns: பெயர் | கைபேசி | பாக்கி (நிலுவை) | வரவு (empty) | தேதி
+// MAIN PDF GENERATOR
+// FIX 1: NO empty filler rows — table ends naturally after last customer
+// FIX 2: Serial numbers 1,2,3... continuous across all pages
+// FIX 3: Sorted oldest createdAt first → newest customer appears last
 // ════════════════════════════════════════════════════════════════════════════
 function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') {
-  const ROWS_PER_PAGE = 25;
-  const pages = chunkArray(customers, ROWS_PER_PAGE);
+
+  // ── FIX 3: Sort oldest first so newly added customers appear at the end ──
+  const sortedCustomers = [...customers].sort((a, b) => {
+    const da = a.createdAt ? new Date(a.createdAt) : new Date(0);
+    const db = b.createdAt ? new Date(b.createdAt) : new Date(0);
+    return da - db;
+  });
+
+  // ── FIX 1: Increased rows per page since we removed empty padding rows ──
+  const ROWS_PER_PAGE = 30;
+  const pages = chunkArray(sortedCustomers, ROWS_PER_PAGE);
   const totalPages = pages.length;
   const today = dateStr || new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'2-digit', year:'numeric' });
-  const grandPending = customers.reduce((s, c) => s + (c.pendingAmount || 0), 0);
-  const grandTotal   = customers.reduce((s, c) => s + (c.totalAmount   || 0), 0);
-  const grandPaid    = customers.reduce((s, c) => s + (c.totalPaid     || 0), 0);
+  const grandPending = sortedCustomers.reduce((s, c) => s + (c.pendingAmount || 0), 0);
+  const grandTotal   = sortedCustomers.reduce((s, c) => s + (c.totalAmount   || 0), 0);
+  const grandPaid    = sortedCustomers.reduce((s, c) => s + (c.totalPaid     || 0), 0);
 
   const css = `
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;600;700;900&display=swap');
@@ -109,14 +121,13 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
       .page{page-break-after:always;}
       .page:last-child{page-break-after:auto;}
     }
+    /* FIX 1: Removed min-height:297mm — no forced blank space. Page height is driven by content only. */
     .page{
-      width:210mm;min-height:297mm;
+      width:210mm;
       padding:10mm 10mm 8mm 10mm;
       box-sizing:border-box;
-      display:flex;flex-direction:column;
       background:#fff;
     }
-    /* ── TOP HEADER ── */
     .top-header{
       display:grid;
       grid-template-columns:1fr auto 1fr;
@@ -138,9 +149,7 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
     .date-block{text-align:right;}
     .date-val{font-size:13px;font-weight:700;color:#1a1a1a;}
     .page-num{font-size:9px;color:#888;margin-top:2px;}
-    /* ── DIVIDER ── */
     .divider{border-top:2.5px solid #1a1a1a;margin:6px 0 6px 0;}
-    /* ── TABLE ── */
     table{width:100%;border-collapse:collapse;font-size:11px;}
     thead tr{border-bottom:2px solid #1a1a1a;}
     thead th{
@@ -153,8 +162,8 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
     thead th:last-child{border-right:none;}
     thead th.r{text-align:right;}
     thead th.c{text-align:center;}
+    /* FIX 1: tbody rows have no forced height — they are only as tall as content */
     tbody tr{border-bottom:1px solid #ddd;}
-    tbody tr:last-child{border-bottom:1px solid #aaa;}
     tbody td{
       padding:5px 4px;
       vertical-align:middle;
@@ -163,14 +172,18 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
     tbody td:last-child{border-right:none;}
     tbody td.r{text-align:right;}
     tbody td.c{text-align:center;}
+    /* FIX 2: serial number column style */
+    tbody td.sno{
+      text-align:center;
+      color:#888;
+      font-size:9.5px;
+      font-weight:700;
+    }
     tbody td.name{font-weight:700;font-size:11.5px;}
     tbody td.bal{font-weight:800;text-align:right;}
     tbody td.bal.has-bal{color:#b91c1c;}
     tbody td.bal.cleared{color:#166534;font-size:10px;}
-    tbody td.empty-col{min-height:22px;height:22px;}
-    .empty-row td{height:22px;border-bottom:1px solid #eee;}
-    /* ── FOOTER ── */
-    .spacer{flex:1;}
+    tbody td.empty-col{height:22px;}
     .summary-row{
       display:flex;justify-content:space-between;align-items:center;
       border-top:2px solid #1a1a1a;margin-top:8px;padding-top:6px;
@@ -185,9 +198,12 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
 
   const pageHTMLs = pages.map((pageCusts, pi) => {
     const isLast = pi === totalPages - 1;
-    const emptyRows = Math.max(0, ROWS_PER_PAGE - pageCusts.length);
+    // FIX 2: serial number is global and continuous across pages
+    const globalOffset = pi * ROWS_PER_PAGE;
 
+    // FIX 1: NO emptyRows, NO emptyHTML — removed entirely
     const rowsHTML = pageCusts.map((c, idx) => {
+      const serialNo = globalOffset + idx + 1; // FIX 2: continuous 1-based serial
       const pending  = c.pendingAmount || 0;
       const tot      = c.totalAmount   || 0;
       const paid     = c.totalPaid     || 0;
@@ -195,6 +211,7 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
       const hasBal   = pending > 0;
 
       return `<tr>
+        <td class="sno">${serialNo}</td>
         <td class="name">${nameDisp}</td>
         <td>${c.phone || '—'}</td>
         <td class="r" style="font-size:10.5px;color:#555;">${tot > 0 ? '₹' + tot.toFixed(2) : '—'}</td>
@@ -205,16 +222,12 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
       </tr>`;
     }).join('');
 
-    const emptyHTML = Array(emptyRows).fill(0).map(() =>
-      `<tr class="empty-row"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`
-    ).join('');
-
+    // Summary footer only on last page; continuation note on others
     const footerHTML = isLast ? `
-      <div class="spacer"></div>
       <div class="summary-row">
         <div class="sum-item">
           <div class="sum-label">மொத்த வாடிக்கையாளர்கள்</div>
-          <div class="sum-val">${customers.length}</div>
+          <div class="sum-val">${sortedCustomers.length}</div>
         </div>
         <div class="sum-item">
           <div class="sum-label">மொத்த வாங்கிய தொகை</div>
@@ -230,7 +243,7 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
         </div>
       </div>
       <div class="footer-note">கணினி மூலம் உருவாக்கப்பட்டது — சகா அரிசி கடை</div>` :
-      `<div class="spacer"></div><div class="continue-note">அடுத்த பக்கம்... ${pi+1} / ${totalPages}</div>`;
+      `<div class="continue-note">அடுத்த பக்கம்... ${pi+1} / ${totalPages}</div>`;
 
     return `<div class="page">
       <div class="top-header">
@@ -239,7 +252,9 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
           <div class="shop-sub">நிலுவை அறிக்கை · ${periodLabel}</div>
         </div>
         <div class="area-block">
-          ${areaName ? `<div class="area-name">${areaName}</div><div class="area-period">பகுதி வாடிக்கையாளர்கள்</div>` : `<div class="area-name">வாடிக்கையாளர் பட்டியல்</div>`}
+          ${areaName
+            ? `<div class="area-name">${areaName}</div><div class="area-period">பகுதி வாடிக்கையாளர்கள்</div>`
+            : `<div class="area-name">வாடிக்கையாளர் பட்டியல்</div>`}
         </div>
         <div class="date-block">
           <div class="date-val">${today}</div>
@@ -250,18 +265,18 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
       <table>
         <thead>
           <tr>
-            <th style="width:22%;">பெயர்</th>
-            <th style="width:14%;">கைபேசி</th>
-            <th class="r" style="width:14%;">மொத்த தொகை</th>
-            <th class="r" style="width:14%;">வரவு</th>
+            <th class="c" style="width:4%;">#</th>
+            <th style="width:20%;">பெயர்</th>
+            <th style="width:13%;">கைபேசி</th>
+            <th class="r" style="width:13%;">மொத்த தொகை</th>
+            <th class="r" style="width:13%;">வரவு</th>
             <th class="r" style="width:14%;">நிலுவை (பாக்கி)</th>
-            <th style="width:14%;">சிப்பம் &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>
-            <th class="c" style="width:8%;">தேதி</th>
+            <th style="width:13%;">சிப்பம் &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>
+            <th class="c" style="width:10%;">தேதி</th>
           </tr>
         </thead>
         <tbody>
           ${rowsHTML}
-          ${emptyHTML}
         </tbody>
       </table>
       ${footerHTML}
@@ -286,7 +301,7 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
 // ════════════════════════════════════════════════════════════════════════════
 function generateInvoiceHistoryPDF(customer, salesWithBalance, totalQtyAll, totalBilled, totalPaidAll, finalBalance) {
   const today = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'2-digit', year:'numeric' });
-  const ROWS_PER_PAGE = 22;
+  const ROWS_PER_PAGE = 25;
   const pages = chunkArray(salesWithBalance, ROWS_PER_PAGE);
   const totalPages = pages.length;
   const nameTA = customer.nameTamil || transliterateToTamil(customer.name);
@@ -299,7 +314,7 @@ function generateInvoiceHistoryPDF(customer, salesWithBalance, totalQtyAll, tota
       @page{size:A4;margin:0;}body{margin:0;}
       .page{page-break-after:always;}.page:last-child{page-break-after:auto;}
     }
-    .page{width:210mm;min-height:297mm;padding:10mm 10mm 8mm 10mm;box-sizing:border-box;display:flex;flex-direction:column;background:#fff;}
+    .page{width:210mm;padding:10mm 10mm 8mm 10mm;box-sizing:border-box;background:#fff;}
     .top-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:flex-start;margin-bottom:4px;}
     .shop-name{font-size:15px;font-weight:900;color:#1a1a1a;}
     .shop-sub{font-size:9px;color:#666;margin-top:2px;}
@@ -309,9 +324,6 @@ function generateInvoiceHistoryPDF(customer, salesWithBalance, totalQtyAll, tota
     .date-block{text-align:right;}
     .date-val{font-size:13px;font-weight:700;}
     .divider{border-top:2.5px solid #1a1a1a;margin:6px 0;}
-    .cust-info{display:flex;gap:24px;margin-bottom:6px;font-size:10px;}
-    .ci-label{font-weight:700;color:#555;font-size:9px;text-transform:uppercase;}
-    .ci-val{font-weight:800;font-size:11px;margin-top:1px;}
     table{width:100%;border-collapse:collapse;font-size:10.5px;}
     thead tr{border-bottom:2px solid #1a1a1a;}
     thead th{padding:5px 4px;font-weight:900;font-size:10px;text-align:left;border-right:1px solid #bbb;border-bottom:2px solid #1a1a1a;white-space:nowrap;}
@@ -325,26 +337,25 @@ function generateInvoiceHistoryPDF(customer, salesWithBalance, totalQtyAll, tota
     .bal-cell{text-align:right;font-weight:800;}
     .bal-cell.red{color:#b91c1c;}
     .bal-cell.green{color:#166534;}
-    .spacer{flex:1;}
     .summary-row{display:flex;justify-content:space-between;align-items:center;border-top:2px solid #1a1a1a;margin-top:8px;padding-top:6px;}
     .sum-item{text-align:center;}
     .sum-label{font-size:9px;color:#555;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;}
     .sum-val{font-size:13px;font-weight:900;color:#1a1a1a;margin-top:1px;}
-    .final-bal{text-align:center;margin-top:6px;padding:6px;border-radius:4px;}
-    .final-bal.red{background:#fef2f2;border:1px solid #fecaca;}
-    .final-bal.green{background:#f0fdf4;border:1px solid #bbf7d0;}
     .footer-note{text-align:center;margin-top:5px;font-size:8.5px;color:#999;border-top:1px solid #eee;padding-top:4px;}
   `;
 
   const pageHTMLs = pages.map((pageSales, pi) => {
     const isLast = pi === totalPages - 1;
+    const globalOffset = pi * ROWS_PER_PAGE;
 
     const rowsHTML = pageSales.map((sale, idx) => {
+      const serialNo  = globalOffset + idx + 1;
       const prevP = sale.previousPending || 0;
       const paid  = sale.amountPaid || (sale.paymentStatus === 'paid' ? sale.totalAmount : 0) || 0;
       const totalOwed = (sale.totalAmount || 0) + prevP;
       const hasBal = sale.computedBalance > 0;
       return `<tr>
+        <td class="c" style="font-size:9.5px;color:#888;font-weight:700;">${serialNo}</td>
         <td style="font-size:9.5px;color:#555;">${new Date(sale.createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'})}</td>
         <td style="font-weight:700;color:#d4831e;font-size:9.5px;">#${sale.invoiceNumber}</td>
         <td class="r">${sale.totalQty} கி.கி</td>
@@ -357,7 +368,6 @@ function generateInvoiceHistoryPDF(customer, salesWithBalance, totalQtyAll, tota
     }).join('');
 
     const footerHTML = isLast ? `
-      <div class="spacer"></div>
       <div class="summary-row">
         <div class="sum-item"><div class="sum-label">மொத்த பில்கள்</div><div class="sum-val">${salesWithBalance.length}</div></div>
         <div class="sum-item"><div class="sum-label">மொத்த அளவு</div><div class="sum-val">${totalQtyAll} கி.கி</div></div>
@@ -366,7 +376,7 @@ function generateInvoiceHistoryPDF(customer, salesWithBalance, totalQtyAll, tota
         <div class="sum-item"><div class="sum-label">இறுதி நிலுவை</div><div class="sum-val" style="color:${finalBalance>0?'#b91c1c':'#166534'};">₹${finalBalance.toFixed(2)}</div></div>
       </div>
       <div class="footer-note">கணினி மூலம் உருவாக்கப்பட்டது — சகா அரிசி கடை</div>` :
-      `<div class="spacer"></div><div style="text-align:right;font-size:9px;color:#888;">அடுத்த பக்கம்... ${pi+1}/${totalPages}</div>`;
+      `<div style="text-align:right;font-size:9px;color:#888;margin-top:4px;">அடுத்த பக்கம்... ${pi+1}/${totalPages}</div>`;
 
     return `<div class="page">
       <div class="top-header">
@@ -387,9 +397,10 @@ function generateInvoiceHistoryPDF(customer, salesWithBalance, totalQtyAll, tota
       <table>
         <thead>
           <tr>
-            <th style="width:11%;">தேதி</th>
-            <th style="width:10%;">பில் #</th>
-            <th class="r" style="width:10%;">அளவு</th>
+            <th class="c" style="width:4%;">#</th>
+            <th style="width:10%;">தேதி</th>
+            <th style="width:9%;">பில் #</th>
+            <th class="r" style="width:9%;">அளவு</th>
             <th class="r" style="width:13%;">பில் தொகை</th>
             <th class="r" style="width:13%;">முந்தைய நிலுவை</th>
             <th class="r" style="width:13%;">வரவு</th>
@@ -420,7 +431,7 @@ function generateInvoiceHistoryPDF(customer, salesWithBalance, totalQtyAll, tota
 // Customer Invoice History Modal
 // ════════════════════════════════════════════════════════════════════════════
 function CustomerInvoicesModal({ customer, onClose }) {
-  const [sales, setSales]   = useState([]);
+  const [sales, setSales]     = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -462,18 +473,20 @@ function CustomerInvoicesModal({ customer, onClose }) {
               className="bg-white text-brand-600 font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs hover:bg-brand-50">
               <Printer className="w-3.5 h-3.5"/> Print Tamil PDF
             </button>
-            <button onClick={onClose} className="p-2 text-white/70 hover:text-white hover:bg-white/20 rounded-xl"><X className="w-5 h-5"/></button>
+            <button onClick={onClose} className="p-2 text-white/70 hover:text-white hover:bg-white/20 rounded-xl">
+              <X className="w-5 h-5"/>
+            </button>
           </div>
         </div>
 
         <div className="grid grid-cols-4 gap-3 p-4 border-b border-gray-100">
           {[
-            { label: 'மொத்த அளவு', val: totalQtyAll + ' kg', cls: 'text-brand-600' },
-            { label: 'மொத்த தொகை', val: '₹' + totalBilled.toFixed(2), cls: 'text-orange-600' },
+            { label: 'மொத்த அளவு',      val: totalQtyAll + ' kg',          cls: 'text-brand-600' },
+            { label: 'மொத்த தொகை',      val: '₹' + totalBilled.toFixed(2), cls: 'text-orange-600' },
             { label: 'செலுத்திய தொகை', val: '₹' + totalPaidAll.toFixed(2), cls: 'text-green-600' },
-            { label: 'இறுதி நிலுவை', val: '₹' + finalBalance.toFixed(2), cls: finalBalance > 0 ? 'text-red-600' : 'text-green-600' },
+            { label: 'இறுதி நிலுவை',   val: '₹' + finalBalance.toFixed(2), cls: finalBalance > 0 ? 'text-red-600' : 'text-green-600' },
           ].map(c => (
-            <div key={c.label} className={`text-center p-3 bg-gray-50 rounded-xl border border-gray-200`}>
+            <div key={c.label} className="text-center p-3 bg-gray-50 rounded-xl border border-gray-200">
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">{c.label}</p>
               <p className={`text-lg font-bold font-mono ${c.cls}`}>{c.val}</p>
             </div>
@@ -482,14 +495,16 @@ function CustomerInvoicesModal({ customer, onClose }) {
 
         <div className="overflow-y-auto flex-1">
           {loading ? (
-            <div className="flex items-center justify-center py-12"><div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"/></div>
+            <div className="flex items-center justify-center py-12">
+              <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"/>
+            </div>
           ) : salesWithBalance.length === 0 ? (
             <div className="text-center py-12 text-gray-400 font-bold">No invoices found</div>
           ) : (
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
                 <tr>
-                  {['தேதி','Invoice #','Qty','Bill Total','Prev Pending','Total Payable','Paid','Final Balance','Status'].map(h=>(
+                  {['#','தேதி','Invoice #','Qty','Bill Total','Prev Pending','Total Payable','Paid','Final Balance','Status'].map(h => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
@@ -501,6 +516,7 @@ function CustomerInvoicesModal({ customer, onClose }) {
                   const totalOwed = (sale.totalAmount || 0) + prevP;
                   return (
                     <tr key={sale._id} className={`border-b border-gray-100 ${i%2===0?'bg-white':'bg-gray-50'}`}>
+                      <td className="px-3 py-2 text-xs font-bold text-gray-400">{i+1}</td>
                       <td className="px-3 py-2 text-xs text-gray-500">{new Date(sale.createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</td>
                       <td className="px-3 py-2 text-xs font-bold text-brand-600">#{sale.invoiceNumber}</td>
                       <td className="px-3 py-2 text-xs font-bold">{sale.totalQty} kg</td>
@@ -514,7 +530,9 @@ function CustomerInvoicesModal({ customer, onClose }) {
                           : <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded">✓</span>}
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${sale.paymentStatus==='paid'?'bg-green-100 text-green-700':sale.paymentStatus==='pending'?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{sale.paymentStatus}</span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${sale.paymentStatus==='paid'?'bg-green-100 text-green-700':sale.paymentStatus==='pending'?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>
+                          {sale.paymentStatus}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -529,7 +547,7 @@ function CustomerInvoicesModal({ customer, onClose }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Add/Edit Customer Modal — address autocomplete, no city
+// Add/Edit Customer Modal
 // ════════════════════════════════════════════════════════════════════════════
 function CustomerModal({ customer, existingPending = 0, onClose, onSaved, allAddresses = [] }) {
   const isEdit = !!customer;
@@ -610,7 +628,8 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved, allAdd
           </div>
 
           <div className="border border-gray-200 rounded-xl p-4 space-y-3">
-            <p className="font-bold text-gray-900 text-sm flex items-center gap-2"><Wallet className="w-4 h-4 text-brand-500"/>
+            <p className="font-bold text-gray-900 text-sm flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-brand-500"/>
               {isEdit ? 'Adjust Pending Balance' : 'Opening Balance (if any)'}
             </p>
             {isEdit && (
@@ -706,7 +725,9 @@ export default function Customers() {
   const loadAddresses = useCallback(async () => {
     try {
       const res = await getCustomers({ page:1, limit:9999 });
-      const addresses = [...new Set(res.data.data.map(c=>c.address).filter(Boolean).map(a=>a.trim()).filter(a=>a.length>0))].sort();
+      const addresses = [...new Set(
+        res.data.data.map(c => c.address).filter(Boolean).map(a => a.trim()).filter(a => a.length > 0)
+      )].sort();
       setAllAddresses(addresses);
     } catch (_) {}
   }, []);
@@ -730,65 +751,70 @@ export default function Customers() {
     return true;
   });
 
-  // Build rich customer data for PDF by pulling sales data
+  // ── Build rich customer data for PDF ─────────────────────────────────────
   const buildCustomerReportData = async () => {
-    // Fetch all customers matching current search/filter
     const res = await getCustomers({ page:1, limit:9999, search: search.trim()||undefined });
     const allCusts = res.data.data;
 
-    // Fetch all sales (with period filter if set)
     const salesParams = { page:1, limit:9999 };
     if (period !== 'all' && period !== 'custom') salesParams.period = period;
-    if (period === 'custom') { if (startDate) salesParams.startDate = startDate; if (endDate) salesParams.endDate = endDate; }
+    if (period === 'custom') {
+      if (startDate) salesParams.startDate = startDate;
+      if (endDate)   salesParams.endDate   = endDate;
+    }
     const salesRes = await getSales(salesParams);
     const allSales = salesRes.data.data || [];
 
-    // Build per-customer aggregates from sales
     const salesMap = {};
     for (const sale of allSales) {
       const name = sale.customerName;
       if (!salesMap[name]) salesMap[name] = { totalAmount:0, totalPaid:0, totalQty:0, lastBillDate: sale.createdAt };
-      const prevP = sale.previousPending || 0;
-      const tot   = sale.totalAmount || 0;
-      const paid  = sale.amountPaid || (sale.paymentStatus==='paid' ? tot : 0) || 0;
-      const qty   = (sale.items||[]).reduce((s,it)=>s+(it.quantity||0),0);
+      const tot  = sale.totalAmount || 0;
+      const paid = sale.amountPaid || (sale.paymentStatus==='paid' ? tot : 0) || 0;
+      const qty  = (sale.items||[]).reduce((s,it) => s+(it.quantity||0), 0);
       salesMap[name].totalAmount += tot;
       salesMap[name].totalPaid   += paid;
       salesMap[name].totalQty    += qty;
-      if (new Date(sale.createdAt) > new Date(salesMap[name].lastBillDate)) salesMap[name].lastBillDate = sale.createdAt;
+      if (new Date(sale.createdAt) > new Date(salesMap[name].lastBillDate))
+        salesMap[name].lastBillDate = sale.createdAt;
     }
 
-    // Merge with customer records and pending from pendingMap
     const result = allCusts.map(c => ({
       ...c,
       pendingAmount: pendingMap[c._id] || 0,
-      totalAmount:   salesMap[c.name]?.totalAmount   || 0,
-      totalPaid:     salesMap[c.name]?.totalPaid     || 0,
-      totalQty:      salesMap[c.name]?.totalQty      || 0,
-      lastBillDate:  salesMap[c.name]?.lastBillDate  || null,
+      totalAmount:   salesMap[c.name]?.totalAmount  || 0,
+      totalPaid:     salesMap[c.name]?.totalPaid    || 0,
+      totalQty:      salesMap[c.name]?.totalQty     || 0,
+      lastBillDate:  salesMap[c.name]?.lastBillDate || null,
     })).filter(c =>
       filterMode === 'pending' ? (c.pendingAmount > 0) :
       filterMode === 'clear'   ? (c.pendingAmount === 0) : true
     );
 
-    return result;
+    // ── FIX 3: Sort oldest createdAt first so newly added customers are at the end ──
+    return result.sort((a, b) => {
+      const da = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const db = b.createdAt ? new Date(b.createdAt) : new Date(0);
+      return da - db;
+    });
   };
 
   const handlePrintReport = async () => {
     try {
       toast.loading('Generating PDF...', { id: 'pdf' });
       const all = await buildCustomerReportData();
-      // Detect area filter from search
       const matchedArea = search.trim()
         ? (allAddresses.find(a => a.toLowerCase().includes(search.toLowerCase())) || search.trim())
         : '';
-      // Filter by area if address search
       const filtered = matchedArea
         ? all.filter(c => (c.address||'').toLowerCase().includes(matchedArea.toLowerCase()))
         : all;
       toast.dismiss('pdf');
       openPrint(generateLedgerPDF(filtered, periodLabel, matchedArea, ''));
-    } catch(e) { toast.dismiss('pdf'); toast.error('Failed to generate PDF'); }
+    } catch(e) {
+      toast.dismiss('pdf');
+      toast.error('Failed to generate PDF');
+    }
   };
 
   const handleExportCSV = async () => {
@@ -802,25 +828,27 @@ export default function Customers() {
         ['#','Customer Name','Phone','Address','Total Qty','Total Amount','Total Paid','Pending Balance'],
         ...all.map((c,i) => [i+1, c.name, c.phone||'', c.address||'', (c.totalQty||0), (c.totalAmount||0).toFixed(2), (c.totalPaid||0).toFixed(2), (c.pendingAmount||0).toFixed(2)]),
         [],
-        ['','','','','','TOTAL PENDING', all.reduce((s,c)=>s+(c.pendingAmount||0),0).toFixed(2)],
+        ['','','','','','TOTAL PENDING','', all.reduce((s,c) => s+(c.pendingAmount||0), 0).toFixed(2)],
       ];
-      const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
       const blob = new Blob([csv], { type:'text/csv' });
       const url  = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href=url; a.download=`Customers_${periodLabel.replace(/\s+/g,'_')}.csv`; a.click(); URL.revokeObjectURL(url);
+      const a = document.createElement('a');
+      a.href = url; a.download = `Customers_${periodLabel.replace(/\s+/g,'_')}.csv`; a.click();
+      URL.revokeObjectURL(url);
       toast.success('CSV exported!');
     } catch { toast.error('Failed to export'); }
   };
 
-  const totalPending = Object.values(pendingMap).reduce((s,v)=>s+v,0);
-  const pendingCount = Object.values(pendingMap).filter(v=>v>0).length;
-  const clearCount   = Object.values(pendingMap).filter(v=>v===0).length;
+  const totalPending = Object.values(pendingMap).reduce((s,v) => s+v, 0);
+  const pendingCount = Object.values(pendingMap).filter(v => v > 0).length;
+  const clearCount   = Object.values(pendingMap).filter(v => v === 0).length;
 
-  // Detect area search for UI hint
   const isAreaSearch = search.trim() && allAddresses.some(a => a.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="space-y-6">
+      {/* ── Page header ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold text-gray-900">Customers / வாடிக்கையாளர்கள்</h1>
@@ -831,31 +859,52 @@ export default function Customers() {
         </button>
       </div>
 
-      {/* Summary cards */}
+      {/* ── Summary cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="card p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center"><Users className="w-5 h-5 text-brand-600"/></div>
-          <div><p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Total Customers</p><p className="text-xl font-bold text-gray-900">{pagination.total}</p></div>
+          <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center">
+            <Users className="w-5 h-5 text-brand-600"/>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Total Customers</p>
+            <p className="text-xl font-bold text-gray-900">{pagination.total}</p>
+          </div>
         </div>
-        <div className="card p-4 flex items-center gap-3 cursor-pointer hover:border-red-300 transition-all" onClick={() => setFilterMode(f => f==='pending'?'all':'pending')}>
+
+        <div className="card p-4 flex items-center gap-3 cursor-pointer hover:border-red-300 transition-all"
+          onClick={() => setFilterMode(f => f==='pending'?'all':'pending')}>
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${filterMode==='pending'?'bg-red-500':'bg-red-100'}`}>
             <AlertCircle className={`w-5 h-5 ${filterMode==='pending'?'text-white':'text-red-600'}`}/>
           </div>
-          <div><p className="text-xs font-bold text-gray-500 uppercase tracking-wide">With Pending</p><p className="text-xl font-bold text-red-600">{pendingCount}</p></div>
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">With Pending</p>
+            <p className="text-xl font-bold text-red-600">{pendingCount}</p>
+          </div>
         </div>
-        <div className="card p-4 flex items-center gap-3 cursor-pointer hover:border-green-300 transition-all" onClick={() => setFilterMode(f => f==='clear'?'all':'clear')}>
+
+        <div className="card p-4 flex items-center gap-3 cursor-pointer hover:border-green-300 transition-all"
+          onClick={() => setFilterMode(f => f==='clear'?'all':'clear')}>
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${filterMode==='clear'?'bg-green-500':'bg-green-100'}`}>
             <CheckCircle className={`w-5 h-5 ${filterMode==='clear'?'text-white':'text-green-600'}`}/>
           </div>
-          <div><p className="text-xs font-bold text-gray-500 uppercase tracking-wide">All Clear</p><p className="text-xl font-bold text-green-600">{clearCount}</p></div>
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">All Clear</p>
+            <p className="text-xl font-bold text-green-600">{clearCount}</p>
+          </div>
         </div>
+
         <div className="card p-4 flex items-center gap-3 border-amber-200 bg-amber-50">
-          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center"><Wallet className="w-5 h-5 text-amber-600"/></div>
-          <div><p className="text-xs font-bold text-amber-600 uppercase tracking-wide">Total Pending</p><p className="text-xl font-bold text-amber-700">₹{totalPending.toFixed(2)}</p></div>
+          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+            <Wallet className="w-5 h-5 text-amber-600"/>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-amber-600 uppercase tracking-wide">Total Pending</p>
+            <p className="text-xl font-bold text-amber-700">₹{totalPending.toFixed(2)}</p>
+          </div>
         </div>
       </div>
 
-      {/* Filter / Export */}
+      {/* ── Filter / Export ── */}
       <div className="card p-4 space-y-3">
         <div className="flex flex-wrap gap-2 items-center justify-between">
           <div className="flex gap-2 flex-wrap items-center">
@@ -919,12 +968,16 @@ export default function Customers() {
         )}
       </div>
 
-      {/* Table */}
+      {/* ── Customers Table ── */}
       <div className="card overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
           <h3 className="font-bold text-gray-900 text-sm">
             Customers
-            {filterMode !== 'all' && <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-full ${filterMode==='pending'?'bg-red-100 text-red-700':'bg-green-100 text-green-700'}`}>{filterMode}</span>}
+            {filterMode !== 'all' && (
+              <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-full ${filterMode==='pending'?'bg-red-100 text-red-700':'bg-green-100 text-green-700'}`}>
+                {filterMode}
+              </span>
+            )}
             <span className="text-gray-400 font-normal ml-2">({pagination.total} total)</span>
           </h3>
         </div>
@@ -944,7 +997,10 @@ export default function Customers() {
                 </td></tr>
               ) : displayedCustomers.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-12 text-gray-400 font-bold">
-                  No customers found. {filterMode !== 'all' && <button onClick={() => setFilterMode('all')} className="text-brand-500 underline ml-1">Show all</button>}
+                  No customers found.{' '}
+                  {filterMode !== 'all' && (
+                    <button onClick={() => setFilterMode('all')} className="text-brand-500 underline ml-1">Show all</button>
+                  )}
                 </td></tr>
               ) : displayedCustomers.map((c, i) => {
                 const pending   = pendingMap[c._id] || 0;
@@ -959,7 +1015,9 @@ export default function Customers() {
                       {c.notes && <p className="text-xs text-gray-400 mt-0.5 italic">{c.notes}</p>}
                     </td>
                     <td className="px-3 py-3">
-                      {c.phone ? <a href={`tel:${c.phone}`} className="text-sm font-bold text-brand-600 hover:underline">{c.phone}</a> : <span className="text-gray-300">—</span>}
+                      {c.phone
+                        ? <a href={`tel:${c.phone}`} className="text-sm font-bold text-brand-600 hover:underline">{c.phone}</a>
+                        : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-3 py-3 max-w-[150px]">
                       <p className="text-xs text-gray-600 truncate">{c.address || '—'}</p>
@@ -970,8 +1028,14 @@ export default function Customers() {
                           <span className="inline-flex items-center gap-1 text-sm font-bold text-red-700 bg-red-50 px-2 py-1 rounded-lg border border-red-200">
                             <AlertCircle className="w-3.5 h-3.5"/> ₹{pending.toFixed(2)}
                           </span>
-                          {manualAdj !== 0 && <p className="text-xs text-gray-400 mt-0.5">Invoice: ₹{salesPend.toFixed(2)} {manualAdj>=0?'+':''}₹{manualAdj.toFixed(2)} adj</p>}
-                          {c.manualPendingNote && <p className="text-xs text-amber-600 mt-0.5 italic">{c.manualPendingNote}</p>}
+                          {manualAdj !== 0 && (
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              Invoice: ₹{salesPend.toFixed(2)} {manualAdj>=0?'+':''}₹{manualAdj.toFixed(2)} adj
+                            </p>
+                          )}
+                          {c.manualPendingNote && (
+                            <p className="text-xs text-amber-600 mt-0.5 italic">{c.manualPendingNote}</p>
+                          )}
                         </div>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
@@ -986,8 +1050,14 @@ export default function Customers() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1">
-                        <button onClick={() => openEdit(c)} className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"><Pencil className="w-4 h-4"/></button>
-                        <button onClick={() => handleDelete(c._id, c.name)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                        <button onClick={() => openEdit(c)}
+                          className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors">
+                          <Pencil className="w-4 h-4"/>
+                        </button>
+                        <button onClick={() => handleDelete(c._id, c.name)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                          <Trash2 className="w-4 h-4"/>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -999,15 +1069,20 @@ export default function Customers() {
 
         {pagination.pages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-            <span className="text-xs font-bold text-gray-500">Page {page} of {pagination.pages} ({pagination.total} total)</span>
+            <span className="text-xs font-bold text-gray-500">
+              Page {page} of {pagination.pages} ({pagination.total} total)
+            </span>
             <div className="flex gap-2">
-              <button disabled={page<=1} onClick={() => setPage(p=>p-1)} className="btn-secondary px-2 py-1.5 disabled:opacity-40"><ChevronLeft className="w-4 h-4"/></button>
-              <button disabled={page>=pagination.pages} onClick={() => setPage(p=>p+1)} className="btn-secondary px-2 py-1.5 disabled:opacity-40"><ChevronRight className="w-4 h-4"/></button>
+              <button disabled={page<=1} onClick={() => setPage(p=>p-1)}
+                className="btn-secondary px-2 py-1.5 disabled:opacity-40"><ChevronLeft className="w-4 h-4"/></button>
+              <button disabled={page>=pagination.pages} onClick={() => setPage(p=>p+1)}
+                className="btn-secondary px-2 py-1.5 disabled:opacity-40"><ChevronRight className="w-4 h-4"/></button>
             </div>
           </div>
         )}
       </div>
 
+      {/* ── Modals ── */}
       {modalOpen && (
         <CustomerModal
           customer={editCustomer}
@@ -1017,7 +1092,9 @@ export default function Customers() {
           allAddresses={allAddresses}
         />
       )}
-      {viewCustomer && <CustomerInvoicesModal customer={viewCustomer} onClose={() => setViewCustomer(null)}/>}
+      {viewCustomer && (
+        <CustomerInvoicesModal customer={viewCustomer} onClose={() => setViewCustomer(null)}/>
+      )}
     </div>
   );
 }
