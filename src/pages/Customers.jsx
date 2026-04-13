@@ -5,7 +5,7 @@ import {
   Plus, Pencil, Trash2, X, Search, Phone, MapPin,
   AlertCircle, CheckCircle, ChevronLeft, ChevronRight,
   Wallet, Users, RefreshCw, Calendar, FileSpreadsheet,
-  Printer, Eye
+  Printer, Eye, ShoppingBag
 } from 'lucide-react';
 
 const PERIODS = [
@@ -68,7 +68,6 @@ function transliterateToTamil(name) {
   }).join(' ');
 }
 
-// ── chunk array for pagination ────────────────────────────────────────────────
 const chunkArray = (arr, size) => {
   const pages = [];
   for (let i = 0; i < arr.length; i += size) pages.push(arr.slice(i, i + size));
@@ -85,21 +84,16 @@ function openPrint(html) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// MAIN PDF GENERATOR
-// FIX 1: NO empty filler rows — table ends naturally after last customer
-// FIX 2: Serial numbers 1,2,3... continuous across all pages
-// FIX 3: Sorted oldest createdAt first → newest customer appears last
+// LEDGER PDF
 // ════════════════════════════════════════════════════════════════════════════
 function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') {
 
-  // ── FIX 3: Sort oldest first so newly added customers appear at the end ──
   const sortedCustomers = [...customers].sort((a, b) => {
     const da = a.createdAt ? new Date(a.createdAt) : new Date(0);
     const db = b.createdAt ? new Date(b.createdAt) : new Date(0);
     return da - db;
   });
 
-  // ── FIX 1: Increased rows per page since we removed empty padding rows ──
   const ROWS_PER_PAGE = 35;
   const pages = chunkArray(sortedCustomers, ROWS_PER_PAGE);
   const totalPages = pages.length;
@@ -121,7 +115,6 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
       .page{page-break-after:always;}
       .page:last-child{page-break-after:auto;}
     }
-    /* FIX 1: Removed min-height:297mm — no forced blank space. Page height is driven by content only. */
     .page{
       width:210mm;
       padding:10mm 10mm 8mm 10mm;
@@ -162,7 +155,6 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
     thead th:last-child{border-right:none;}
     thead th.r{text-align:right;}
     thead th.c{text-align:center;}
-    /* FIX 1: tbody rows have no forced height — they are only as tall as content */
     tbody tr{border-bottom:1px solid #ddd;}
     tbody td{
       padding:5px 4px;
@@ -172,7 +164,6 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
     tbody td:last-child{border-right:none;}
     tbody td.r{text-align:right;}
     tbody td.c{text-align:center;}
-    /* FIX 2: serial number column style */
     tbody td.sno{
       text-align:center;
       color:#888;
@@ -183,7 +174,13 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
     tbody td.bal{font-weight:800;text-align:right;}
     tbody td.bal.has-bal{color:#b91c1c;}
     tbody td.bal.cleared{color:#166534;font-size:10px;}
-    tbody td.empty-col{height:22px;}
+    tbody td.chipbam-cell{
+      text-align:center;
+      font-weight:700;
+      font-size:10.5px;
+    }
+    tbody td.chipbam-cell .chip-val{color:#1d4ed8;}
+    tbody td.chipbam-cell .chip-date{display:block;font-size:8.5px;color:#6b7280;font-weight:400;margin-top:1px;}
     .summary-row{
       display:flex;justify-content:space-between;align-items:center;
       border-top:2px solid #1a1a1a;margin-top:8px;padding-top:6px;
@@ -198,31 +195,38 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
 
   const pageHTMLs = pages.map((pageCusts, pi) => {
     const isLast = pi === totalPages - 1;
-    // FIX 2: serial number is global and continuous across pages
     const globalOffset = pi * ROWS_PER_PAGE;
 
-    // FIX 1: NO emptyRows, NO emptyHTML — removed entirely
     const rowsHTML = pageCusts.map((c, idx) => {
-      const serialNo = globalOffset + idx + 1; // FIX 2: continuous 1-based serial
-      const pending  = c.pendingAmount || 0;
-      const tot      = c.totalAmount   || 0;
-      const paid     = c.totalPaid     || 0;
-      const nameDisp = c.nameTamil || transliterateToTamil(c.name);
-      const hasBal   = pending > 0;
+      const serialNo  = globalOffset + idx + 1;
+      const pending   = c.pendingAmount || 0;
+      const tot       = c.totalAmount   || 0;
+      const paid      = c.totalPaid     || 0;
+      const hasBal    = pending > 0;
+      const nameDisp  = c.nameTamil || transliterateToTamil(c.name);
+
+      // FIX: chipbam and chipbamDate are already merged into each customer
+      // object by buildCustomerReportData before this function is called.
+      const chipVal  = c.chipbam || '';
+      const chipDate = c.chipbamDate
+        ? new Date(c.chipbamDate).toLocaleDateString('en-IN', { day:'2-digit', month:'2-digit', year:'numeric' })
+        : '';
 
       return `<tr>
         <td class="sno">${serialNo}</td>
         <td class="name">${nameDisp}</td>
-        <td>${c.phone || '—'}</td>
-        <td class="r" style="font-size:10.5px;color:#555;">${tot > 0 ? '₹' + tot.toFixed(2) : '—'}</td>
         <td class="r" style="font-size:10.5px;color:#166534;">${paid > 0 ? '₹' + paid.toFixed(2) : '—'}</td>
         <td class="bal ${hasBal ? 'has-bal' : 'cleared'}">${hasBal ? '₹' + pending.toFixed(2) : '✓'}</td>
-        <td class="empty-col">&nbsp;</td>
+        <td class="chipbam-cell">${chipVal
+          ? `<span class="chip-val">${chipVal}</span>${chipDate ? `<span class="chip-date">${chipDate}</span>` : ''}`
+          : '<span style="color:#d1d5db;">—</span>'
+        }</td>
+        <td style="font-size:10.5px;">${c.phone || '—'}</td>
+        <td class="r" style="font-size:10.5px;color:#555;">${tot > 0 ? '₹' + tot.toFixed(2) : '—'}</td>
         <td class="c" style="font-size:9px;color:#888;">${c.lastBillDate ? new Date(c.lastBillDate).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'}) : ''}</td>
       </tr>`;
     }).join('');
 
-    // Summary footer only on last page; continuation note on others
     const footerHTML = isLast ? `
       <div class="summary-row">
         <div class="sum-item">
@@ -267,11 +271,11 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
           <tr>
             <th class="c" style="width:4%;">#</th>
             <th style="width:20%;">பெயர்</th>
+            <th class="r" style="width:11%;">வரவு</th>
+            <th class="r" style="width:13%;">நிலுவை (பாக்கி)</th>
+            <th class="c" style="width:12%;">சிப்பம்</th>
             <th style="width:13%;">கைபேசி</th>
             <th class="r" style="width:13%;">மொத்த தொகை</th>
-            <th class="r" style="width:13%;">வரவு</th>
-            <th class="r" style="width:14%;">நிலுவை (பாக்கி)</th>
-            <th style="width:13%;">சிப்பம் &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>
             <th class="c" style="width:10%;">தேதி</th>
           </tr>
         </thead>
@@ -297,7 +301,7 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// INVOICE HISTORY PDF — per-customer bill history, Tamil ledger style
+// INVOICE HISTORY PDF
 // ════════════════════════════════════════════════════════════════════════════
 function generateInvoiceHistoryPDF(customer, salesWithBalance, totalQtyAll, totalBilled, totalPaidAll, finalBalance) {
   const today = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'2-digit', year:'numeric' });
@@ -549,13 +553,41 @@ function CustomerInvoicesModal({ customer, onClose }) {
 // ════════════════════════════════════════════════════════════════════════════
 // Add/Edit Customer Modal
 // ════════════════════════════════════════════════════════════════════════════
-function CustomerModal({ customer, existingPending = 0, onClose, onSaved, allAddresses = [] }) {
+function CustomerModal({ customer, existingPending = 0, onClose, onSaved, allAddresses = [], chipbamInfo = {} }) {
   const isEdit = !!customer;
+
+  const toDateInput = (val) => {
+    if (!val) return '';
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return '';
+      return d.toISOString().slice(0, 10);
+    } catch { return ''; }
+  };
+
+  const initChipbam     = isEdit ? (chipbamInfo.chipbam     || customer.chipbam     || '') : '';
+  const initChipbamDate = isEdit ? (chipbamInfo.chipbamDate || customer.chipbamDate || null) : null;
+
   const [form, setForm] = useState(
     isEdit
-      ? { name: customer.name, phone: customer.phone||'', address: customer.address||'', notes: customer.notes||'', manualPendingAdjustment: customer.manualPendingAdjustment??0, manualPendingNote: customer.manualPendingNote||'' }
-      : { name:'', phone:'', address:'', notes:'', manualPendingAdjustment:0, manualPendingNote:'' }
+      ? {
+          name:                    customer.name,
+          phone:                   customer.phone    || '',
+          address:                 customer.address  || '',
+          notes:                   customer.notes    || '',
+          manualPendingAdjustment: customer.manualPendingAdjustment ?? 0,
+          manualPendingNote:       customer.manualPendingNote || '',
+          chipbam:                 initChipbam,
+          chipbamDate:             toDateInput(initChipbamDate),
+        }
+      : {
+          name: '', phone: '', address: '', notes: '',
+          manualPendingAdjustment: 0, manualPendingNote: '',
+          chipbam: '',
+          chipbamDate: new Date().toISOString().slice(0, 10),
+        }
   );
+
   const [saving, setSaving]           = useState(false);
   const [adjustType, setAdjustType]   = useState('reduce');
   const [inputAmount, setInputAmount] = useState('');
@@ -576,15 +608,26 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved, allAdd
     const newEffective = adjustType === 'reduce' ? Math.max(0, currentEffective - amt) : currentEffective + amt;
     const newManualAdj = newEffective - existingPending;
     const payload = {
-      name: form.name.trim(), phone: form.phone.trim(), address: form.address.trim(), city:'',
-      notes: form.notes, manualPendingAdjustment: newManualAdj,
+      name:    form.name.trim(),
+      phone:   form.phone.trim(),
+      address: form.address.trim(),
+      city:    '',
+      notes:   form.notes,
+      manualPendingAdjustment: newManualAdj,
       manualPendingNote: form.manualPendingNote || (amt > 0 ? (adjustType==='reduce' ? `₹${amt.toFixed(2)} received manually` : `₹${amt.toFixed(2)} added manually`) : undefined),
+      chipbam:     form.chipbam.trim(),
+      chipbamDate: form.chipbam.trim()
+        ? (form.chipbamDate || new Date().toISOString().slice(0, 10))
+        : null,
     };
     setSaving(true);
     try {
-      if (isEdit) { await updateCustomer(customer._id, payload); toast.success('Customer updated!'); }
-      else { await createCustomer(payload); toast.success('Customer added!'); }
-      onSaved(); onClose();
+      let saved;
+      if (isEdit) { saved = await updateCustomer(customer._id, payload); toast.success('Customer updated!'); }
+      else        { saved = await createCustomer(payload);                toast.success('Customer added!');  }
+      const savedDoc = saved?.data?.data || {};
+      onSaved(savedDoc);
+      onClose();
     } catch (err) { toast.error(err.response?.data?.message || 'Failed to save'); }
     finally { setSaving(false); }
   };
@@ -596,6 +639,7 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved, allAdd
           <h2 className="text-white font-bold text-lg">{isEdit ? 'Edit Customer' : 'Add Customer'}</h2>
           <button onClick={onClose} className="p-2 text-white/70 hover:text-white hover:bg-white/20 rounded-xl"><X className="w-5 h-5"/></button>
         </div>
+
         <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
@@ -627,6 +671,44 @@ function CustomerModal({ customer, existingPending = 0, onClose, onSaved, allAdd
             </div>
           </div>
 
+          {/* ── சிப்பம் Section ── */}
+          <div className="border border-blue-200 rounded-xl p-4 space-y-3 bg-blue-50/40">
+            <p className="font-bold text-gray-900 text-sm flex items-center gap-2">
+              <ShoppingBag className="w-4 h-4 text-blue-600"/>
+              சிப்பம் (Bag / Sack) விவரம்
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">சிப்பம் <span className="text-gray-400 font-normal">(e.g. 5, 10 சிப்பம்)</span></label>
+                <input
+                  className="input-field"
+                  placeholder="சிப்பம் எண் / குறிப்பு"
+                  value={form.chipbam}
+                  onChange={e => set('chipbam', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label">வாங்கிய தேதி</label>
+                <input
+                  type="date"
+                  className="input-field"
+                  value={form.chipbamDate}
+                  onChange={e => set('chipbamDate', e.target.value)}
+                />
+              </div>
+            </div>
+            {form.chipbam.trim() && (
+              <div className="flex items-center gap-2 bg-blue-100 border border-blue-200 rounded-lg px-3 py-2">
+                <ShoppingBag className="w-3.5 h-3.5 text-blue-600 flex-shrink-0"/>
+                <span className="text-xs font-bold text-blue-800">
+                  சிப்பம்: <strong>{form.chipbam}</strong>
+                  {form.chipbamDate && <> &nbsp;·&nbsp; தேதி: {new Date(form.chipbamDate).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</>}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* ── Pending Balance ── */}
           <div className="border border-gray-200 rounded-xl p-4 space-y-3">
             <p className="font-bold text-gray-900 text-sm flex items-center gap-2">
               <Wallet className="w-4 h-4 text-brand-500"/>
@@ -690,6 +772,9 @@ export default function Customers() {
   const [viewCustomer, setViewCustomer]       = useState(null);
   const [pendingMap, setPendingMap]           = useState({});
   const [salesPendingMap, setSalesPendingMap] = useState({});
+  // ── FIX: use a ref so buildCustomerReportData always reads fresh chipbam data ──
+  const [chipbamMap, setChipbamMap]           = useState({});
+  const chipbamMapRef                         = useRef({});
   const [period, setPeriod]                   = useState('all');
   const [startDate, setStartDate]             = useState('');
   const [endDate, setEndDate]                 = useState('');
@@ -701,13 +786,23 @@ export default function Customers() {
     ? PERIODS.find(p => p.value === period)?.label || period
     : `${startDate||'…'} → ${endDate||'…'}`;
 
+  // ── FIX: loadPending now returns the fresh chipMap AND syncs the ref ──────
   const loadPending = useCallback(async () => {
     try {
       const res = await getCustomersPending();
-      const effMap = {}, salesMap = {};
-      for (const c of res.data.data) { effMap[c._id] = c.pendingAmount||0; salesMap[c._id] = c.salesPending||0; }
-      setPendingMap(effMap); setSalesPendingMap(salesMap);
-    } catch (_) {}
+      const effMap = {}, salesMap = {}, chipMap = {};
+      for (const c of res.data.data) {
+        effMap[c._id]   = c.pendingAmount || 0;
+        salesMap[c._id] = c.salesPending  || 0;
+        chipMap[c._id]  = { chipbam: c.chipbam || '', chipbamDate: c.chipbamDate || null };
+      }
+      setPendingMap(effMap);
+      setSalesPendingMap(salesMap);
+      // Keep both state (for re-render) and ref (for instant reads in callbacks)
+      setChipbamMap(chipMap);
+      chipbamMapRef.current = chipMap;
+      return chipMap;
+    } catch (_) { return {}; }
   }, []);
 
   const load = useCallback(async () => {
@@ -751,7 +846,7 @@ export default function Customers() {
     return true;
   });
 
-  // ── Build rich customer data for PDF ─────────────────────────────────────
+  // ── FIX: buildCustomerReportData reads chipbam from ref (always fresh) ───
   const buildCustomerReportData = async () => {
     const res = await getCustomers({ page:1, limit:9999, search: search.trim()||undefined });
     const allCusts = res.data.data;
@@ -779,19 +874,28 @@ export default function Customers() {
         salesMap[name].lastBillDate = sale.createdAt;
     }
 
-    const result = allCusts.map(c => ({
-      ...c,
-      pendingAmount: pendingMap[c._id] || 0,
-      totalAmount:   salesMap[c.name]?.totalAmount  || 0,
-      totalPaid:     salesMap[c.name]?.totalPaid    || 0,
-      totalQty:      salesMap[c.name]?.totalQty     || 0,
-      lastBillDate:  salesMap[c.name]?.lastBillDate || null,
-    })).filter(c =>
+    // FIX: always use the ref for chipbam — it's always up to date even if
+    // React state hasn't re-rendered yet after a save.
+    const freshChipbamMap = chipbamMapRef.current;
+
+    const result = allCusts.map(c => {
+      const chipInfo = freshChipbamMap[c._id] || {};
+      return {
+        ...c,
+        pendingAmount: pendingMap[c._id] || 0,
+        totalAmount:   salesMap[c.name]?.totalAmount  || 0,
+        totalPaid:     salesMap[c.name]?.totalPaid    || 0,
+        totalQty:      salesMap[c.name]?.totalQty     || 0,
+        lastBillDate:  salesMap[c.name]?.lastBillDate || null,
+        // FIX: chipbam from ref takes priority over stale customer object fields
+        chipbam:     chipInfo.chipbam     !== undefined ? chipInfo.chipbam     : (c.chipbam     || ''),
+        chipbamDate: chipInfo.chipbamDate !== undefined ? chipInfo.chipbamDate : (c.chipbamDate || null),
+      };
+    }).filter(c =>
       filterMode === 'pending' ? (c.pendingAmount > 0) :
       filterMode === 'clear'   ? (c.pendingAmount === 0) : true
     );
 
-    // ── FIX 3: Sort oldest createdAt first so newly added customers are at the end ──
     return result.sort((a, b) => {
       const da = a.createdAt ? new Date(a.createdAt) : new Date(0);
       const db = b.createdAt ? new Date(b.createdAt) : new Date(0);
@@ -825,10 +929,15 @@ export default function Customers() {
         [`Period: ${periodLabel}`],
         [`Generated: ${new Date().toLocaleDateString('en-IN')}`],
         [],
-        ['#','Customer Name','Phone','Address','Total Qty','Total Amount','Total Paid','Pending Balance'],
-        ...all.map((c,i) => [i+1, c.name, c.phone||'', c.address||'', (c.totalQty||0), (c.totalAmount||0).toFixed(2), (c.totalPaid||0).toFixed(2), (c.pendingAmount||0).toFixed(2)]),
+        ['#','Customer Name','Phone','Address','சிப்பம்','சிப்பம் Date','Total Qty','Total Amount','Total Paid','Pending Balance'],
+        ...all.map((c,i) => [
+          i+1, c.name, c.phone||'', c.address||'',
+          c.chipbam||'',
+          c.chipbamDate ? new Date(c.chipbamDate).toLocaleDateString('en-IN') : '',
+          (c.totalQty||0), (c.totalAmount||0).toFixed(2), (c.totalPaid||0).toFixed(2), (c.pendingAmount||0).toFixed(2)
+        ]),
         [],
-        ['','','','','','TOTAL PENDING','', all.reduce((s,c) => s+(c.pendingAmount||0), 0).toFixed(2)],
+        ['','','','','','','','TOTAL PENDING','', all.reduce((s,c) => s+(c.pendingAmount||0), 0).toFixed(2)],
       ];
       const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
       const blob = new Blob([csv], { type:'text/csv' });
@@ -985,18 +1094,18 @@ export default function Customers() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                {['#','Name','Phone','Address','Pending Balance','History',''].map(h => (
+                {['#','Name','Phone','Address','சிப்பம்','Pending Balance','History',''].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="text-center py-12">
+                <tr><td colSpan={8} className="text-center py-12">
                   <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto"/>
                 </td></tr>
               ) : displayedCustomers.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-12 text-gray-400 font-bold">
+                <tr><td colSpan={8} className="text-center py-12 text-gray-400 font-bold">
                   No customers found.{' '}
                   {filterMode !== 'all' && (
                     <button onClick={() => setFilterMode('all')} className="text-brand-500 underline ml-1">Show all</button>
@@ -1006,6 +1115,10 @@ export default function Customers() {
                 const pending   = pendingMap[c._id] || 0;
                 const salesPend = salesPendingMap[c._id] || 0;
                 const manualAdj = c.manualPendingAdjustment || 0;
+                // FIX: always read chipbam from chipbamMap state (populated from
+                // /pending/summary), never from the paginated list's customer object.
+                // The paginated GET / endpoint does NOT return chipbam fields.
+                const chip = chipbamMap[c._id] || {};
 
                 return (
                   <tr key={c._id} className="border-b border-gray-100 hover:bg-orange-50 transition-colors">
@@ -1022,6 +1135,25 @@ export default function Customers() {
                     <td className="px-3 py-3 max-w-[150px]">
                       <p className="text-xs text-gray-600 truncate">{c.address || '—'}</p>
                     </td>
+
+                    {/* FIX: சிப்பம் column — reads from chipbamMap, not c.chipbam */}
+                    <td className="px-3 py-3">
+                      {chip.chipbam ? (
+                        <div>
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200">
+                            <ShoppingBag className="w-3 h-3"/> {chip.chipbam}
+                          </span>
+                          {chip.chipbamDate && (
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {new Date(chip.chipbamDate).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </td>
+
                     <td className="px-3 py-3">
                       {pending > 0 ? (
                         <div>
@@ -1087,8 +1219,38 @@ export default function Customers() {
         <CustomerModal
           customer={editCustomer}
           existingPending={editCustomer ? (salesPendingMap[editCustomer._id]||0) : 0}
+          chipbamInfo={editCustomer ? (chipbamMap[editCustomer._id] || {}) : {}}
           onClose={() => { setModalOpen(false); setEditCustomer(null); }}
-          onSaved={() => { load(); loadPending(); loadAddresses(); }}
+          onSaved={async (savedDoc) => {
+            // ── FIX: step-by-step to avoid race conditions ──────────────────
+            // Step 1: Immediately patch chipbamMap state AND ref with the
+            //         data returned directly from the save API response.
+            //         This means the table updates instantly with no flicker,
+            //         even before loadPending() completes.
+            if (savedDoc?._id) {
+              const freshChip = {
+                chipbam:     savedDoc.chipbam     || '',
+                chipbamDate: savedDoc.chipbamDate || null,
+              };
+              // Patch the ref immediately (synchronous — no re-render delay)
+              chipbamMapRef.current = {
+                ...chipbamMapRef.current,
+                [savedDoc._id]: freshChip,
+              };
+              // Patch state so the table re-renders with correct chipbam
+              setChipbamMap(prev => ({ ...prev, [savedDoc._id]: freshChip }));
+              // Patch customers list row as well
+              setCustomers(prev =>
+                prev.map(c => c._id === savedDoc._id ? { ...c, ...savedDoc } : c)
+              );
+            }
+            // Step 2: Reload pending summary first (updates pendingMap,
+            //         salesPendingMap, AND refreshes chipbamMap from server)
+            await loadPending();
+            // Step 3: Reload paginated list (safe now — chipbamMap is current)
+            load();
+            loadAddresses();
+          }}
           allAddresses={allAddresses}
         />
       )}
