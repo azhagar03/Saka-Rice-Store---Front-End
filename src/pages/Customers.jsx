@@ -271,11 +271,11 @@ function generateLedgerPDF(customers, periodLabel, areaName = '', dateStr = '') 
           <tr>
             <th class="c" style="width:4%;">#</th>
             <th style="width:20%;">பெயர்</th>
-            <th class="r" style="width:11%;">வரவு</th>
-            <th class="r" style="width:13%;">நிலுவை (பாக்கி)</th>
-            <th class="c" style="width:12%;">சிப்பம்</th>
+            <th class="r" style="width:8%;">வரவு</th>
+            <th class="r" style="width:8%;">பாக்கி</th>
+            <th class="c" style="width:5%;">சிப்பம்</th>
             <th style="width:13%;">கைபேசி</th>
-            <th class="r" style="width:13%;">மொத்த தொகை</th>
+            <th class="r" style="width:7%;">மொத்த தொகை</th>
             <th class="c" style="width:10%;">தேதி</th>
           </tr>
         </thead>
